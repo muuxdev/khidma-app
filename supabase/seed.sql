@@ -1,0 +1,33 @@
+-- =============================================================================
+-- Khidma — optional seed data for local testing.
+-- Run AFTER you have created at least one auth user in the Supabase dashboard
+-- and replaced the placeholder UUIDs below with real auth.users IDs.
+-- =============================================================================
+
+-- 1) Replace these with two real user IDs from auth.users:
+--    select id, email from auth.users;
+--
+-- do $$
+-- declare
+--   _client_id    uuid := '00000000-0000-0000-0000-000000000001';
+--   _freelancer   uuid := '00000000-0000-0000-0000-000000000002';
+--   _service_id   uuid;
+-- begin
+--   update public.profiles set role = 'client'     where id = _client_id;
+--   update public.profiles set role = 'freelancer' where id = _freelancer;
+--
+--   insert into public.services
+--     (freelancer_id, title_ar, title_en, description_ar, description_en,
+--      category, slug, status, basic_price, standard_price, premium_price,
+--      packages, tags, cover, images)
+--   values
+--     (_freelancer, 'متجر شوبيفاي احترافي', 'Professional Shopify Store',
+--      'إنشاء متجر متكامل', 'Full Shopify store setup',
+--      'shopify', 'shopify-pro-' || substr(_freelancer::text, 1, 8),
+--      'published', 250, 500, 1000,
+--      '[{"tier":"basic","name":"Basic","price":250,"deliveryDays":3,"revisions":1,"features":["1 page"]},
+--        {"tier":"standard","name":"Standard","price":500,"deliveryDays":5,"revisions":3,"features":["5 pages"]},
+--        {"tier":"premium","name":"Premium","price":1000,"deliveryDays":7,"revisions":5,"features":["10 pages","SEO"]}]'::jsonb,
+--      '{shopify,ecommerce}', 'shopify', '{}')
+--   returning id into _service_id;
+-- end $$;

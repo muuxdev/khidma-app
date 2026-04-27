@@ -1,0 +1,282 @@
+We need to fully fix the core marketplace flow for Khidma:
+1. freelancer publishes a service
+2. client views published services
+3. client orders a service
+4. conversation is created correctly
+5. chat works correctly for both sender and receiver
+6. messages display under the correct account
+
+CRITICAL BUG:
+I tested with two accounts:
+- X = freelancer / service owner
+- Y = client / buyer
+
+When X sends a message to Y, then I log into Y, the message appears as if Y sent it. This means account/session isolation, sender detection, or cached data is broken.
+
+Do a deep audit and fix ONLY this area. Do not redesign UI. Do not rebuild screens.
+
+==================================================
+PART 1 — AUDIT CURRENT FLOW
+==================================================
+
+Audit the exact current implementation for:
+
+- AuthContext
+- DataContext
+- services API
+- orders API
+- chat API
+- mappers
+- AsyncStorage usage
+- React Query/cache usage if any
+- any mock fallback logic
+- chat UI message rendering logic
+- service publish flow
+- order creation flow
+- conversation creation flow
+
+Identify:
+- where currentUser/user/profile is stored
+- how user changes are detected
+- whether cached data is cleared on logout
+- whether cached data is namespaced by user id
+- where sender_id is assigned
+- where client_id and freelancer_id are assigned
+- how the UI decides whether a message is “mine”
+- whether mock and Supabase data are being mixed
+
+==================================================
+PART 2 — HARD RULES
+==================================================
+
+Apply these rules everywhere:
+
+AUTH / SESSION:
+- current user id must always come from Supabase session/auth.uid equivalent.
+- logout must clear:
+  - user
+  - profile
+  - role
+  - orders
+  - conversations
+  - messages
+  - wallet
+  - any user-scoped cache
+- login as a different user must refetch all user-scoped data from Supabase.
+- AsyncStorage keys must be namespaced per user id if used.
+- mock fallback must never mix with Supabase mode.
+
+SERVICES:
+- publishing a service must use freelancer_id = current authenticated user id.
+- only role = freelancer can create/publish/update services.
+- client should see only:
+  - status = published
+  - deleted_at is null
+- service owner should see own draft/published services.
+
+ORDERS:
+- order creation must use:
+  - client_id = current authenticated user id
+  - freelancer_id = service.freelancer_id
+  - service_id = selected service id
+- client must not be able to order own service.
+- after order creation, order must be visible to:
+  - client
+  - freelancer
+- order creation must not rely on stale cached user.
+
+CONVERSATIONS:
+- conversation must be created with:
+  - client_id = order.client_id
+  - freelancer_id = order.freelancer_id
+  - order_id = order.id
+- never swap client_id and freelancer_id.
+- both participants must see the same conversation.
+- no duplicate conversation for the same order.
+
+MESSAGES:
+- sending a message must use:
+  - sender_id = current authenticated user id
+  - conversation_id = active conversation id
+- message UI must decide mine/not mine by:
+  - message.sender_id === currentUser.id
+- do not infer sender from role, index, screen, selected profile, or cached value.
+- receiver must see the same message as coming from the other user.
+- realtime subscription must not duplicate messages.
+- messages must be deduplicated by id before rendering.
+- FlatList keyExtractor must be safe and unique.
+
+==================================================
+PART 3 — FIX RLS + SQL IF NEEDED
+==================================================
+
+Check current Supabase migration policies for:
+- services
+- orders
+- conversations
+- messages
+- notifications
+- audit_logs
+- wallet_transactions
+
+Fix them so they match the app flow.
+
+Expected secure policies:
+
+services:
+- public/authenticated can read published non-deleted services
+- owner freelancer can read/update/delete own services
+- owner freelancer can insert own services
+
+orders:
+- client can insert order only when client_id = auth.uid()
+- client/freelancer participants can read
+- freelancer can update status of own orders
+- client cannot order own service
+
+conversations:
+- participants can read
+- insert allowed only when auth.uid() is client_id or freelancer_id
+- preferably conversation creation follows order participants
+
+messages:
+- participants can read
+- sender can insert only when sender_id = auth.uid()
+- sender must be participant in conversation
+
+notifications:
+- user can read/update own
+- if app writes notifications directly, allow authenticated insert only when user_id is valid for the flow
+- otherwise move notification creation to DB triggers
+
+audit_logs:
+- if app writes audit logs directly, allow insert with user_id = auth.uid()
+- otherwise move audit creation to DB triggers
+
+Do not leave unsafe `with check (true)` policies unless explicitly marked TEMP DEV and replaced with secure alternatives.
+
+==================================================
+PART 4 — FIX CODE
+==================================================
+
+Fix code so the frontend matches the secure RLS.
+
+Required changes:
+
+1. AuthContext
+- Ensure Supabase session listener updates current user/profile correctly.
+- On logout, fully clear all user-scoped state.
+- On login/signup, refetch profile.
+- Prevent stale profile from previous account.
+
+2. DataContext
+- Clear all user-scoped data on user change/logout.
+- Refetch orders/conversations/messages/wallet after login.
+- Separate public services from my services.
+- Do not show previous user data after account switching.
+
+3. servicesApi
+- createService must use current freelancer id.
+- publishService must validate current user owns the service.
+- listPublishedServices must fetch published services reliably.
+
+4. ordersApi
+- createOrder must use current user as client.
+- freelancer_id must come from service.freelancer_id.
+- service_id must be correct.
+- create conversation after order if not exists.
+- do not create duplicate conversations.
+- return created order and conversation if needed.
+
+5. chatApi
+- sendMessage must always use current authenticated user id as sender_id.
+- getMessagesPaginated must fetch by conversation_id.
+- subscribeToMessages must filter by conversation_id.
+- prevent duplicate realtime + initial fetch message insertion.
+
+6. chat UI
+- message bubble ownership must compare sender_id to current user id only.
+- remove any role-based or name-based sender logic.
+- show correct sender when switching accounts.
+
+7. cache
+- namespace AsyncStorage keys by user id.
+- or clear cache completely on logout/user switch.
+- never share chat/order cache between X and Y.
+
+==================================================
+PART 5 — TEST FLOW REQUIRED
+==================================================
+
+After fixing, run/test this exact scenario:
+
+A. Freelancer X:
+- signup/login as freelancer
+- create service
+- publish service
+- confirm service row:
+  - freelancer_id = X.id
+  - status = published
+  - deleted_at is null
+
+B. Client Y:
+- logout completely
+- login as client Y
+- confirm no stale X data appears
+- view published services
+- open X service
+- place order
+- confirm order row:
+  - client_id = Y.id
+  - freelancer_id = X.id
+  - service_id = correct service id
+
+C. Conversation:
+- confirm conversation row:
+  - client_id = Y.id
+  - freelancer_id = X.id
+  - order_id = created order id
+
+D. Chat:
+- Y sends message: “hello from client”
+- DB messages row must have:
+  - sender_id = Y.id
+- logout Y
+- login X
+- X sees message as received / not mine
+- X replies: “hello from freelancer”
+- DB messages row must have:
+  - sender_id = X.id
+- logout X
+- login Y
+- Y sees X reply as received / not mine
+
+E. No cross-account leakage:
+- X must not see Y data as own
+- Y must not see X messages as own
+- orders must appear under correct dashboards
+- chat bubbles must stay correct after refresh and relogin
+
+==================================================
+PART 6 — DELIVERABLES
+==================================================
+
+At the end, provide:
+
+- exact root cause
+- changed files list
+- SQL/RLS changes made
+- code changes summary
+- final test results for X freelancer / Y client
+- any remaining limitations
+
+IMPORTANT:
+Do not add new UI features.
+Do not redesign.
+Do not add payout.
+Focus only on:
+- publish service
+- order service
+- conversation creation
+- chat sender/receiver correctness
+- account isolation

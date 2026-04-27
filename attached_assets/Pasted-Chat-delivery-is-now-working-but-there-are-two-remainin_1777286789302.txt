@@ -1,0 +1,61 @@
+Chat delivery is now working, but there are two remaining chat UI/data bugs.
+
+Current behavior:
+- In the Chat tab list, I can see the conversation and the latest message preview.
+- When I open the conversation screen, the message list is empty.
+- The bottom Chat tab icon does not show an unread count badge, even when the chat list shows unread messages.
+
+Please fix ONLY the chat display and unread badge behavior.
+
+Requirements:
+
+1. Conversation screen
+- When opening app/chat/[id].tsx, fetch messages for that conversation_id from Supabase.
+- Do not rely only on messages already stored in memory.
+- Ensure getMessagesPaginated(conversationId) is called on screen mount.
+- Hydrate messagesByThread[conversationId] correctly.
+- Realtime subscription should append new messages to the currently opened thread.
+- Deduplicate messages by id.
+- Preserve correct sender ownership:
+  message.sender_id === currentUser.id means “mine”.
+
+2. Conversation ID mapping
+- Verify the chat list route id matches the actual conversations.id in Supabase.
+- If UI uses a local thread id, map it correctly to conversation_id before fetching messages.
+- Do not fetch messages by participant id or order id unless intentionally mapped.
+
+3. Unread count badge on bottom Chat tab
+- Compute unread count from conversations/messages where:
+  current user is a participant
+  message.sender_id !== currentUser.id
+  message.is_read = false
+- Show badge on Chat tab icon when unread count > 0.
+- Hide badge when unread count = 0.
+- When opening a conversation, mark messages from the other user as read.
+- Update unread count after marking as read.
+
+4. Backend/API
+- Ensure chatApi.getMessagesPaginated works with the real conversation_id.
+- Ensure chatApi.markMessagesAsRead(conversationId, currentUserId) updates only messages where:
+  conversation_id = conversationId
+  sender_id != currentUserId
+  is_read = false
+- Ensure RLS allows participants to update is_read for received messages.
+
+5. UI constraints
+- Do not redesign the chat UI.
+- Do not add new screens.
+- Preserve current styles, dark mode, RTL/LTR behavior.
+- Only fix message hydration and unread badge.
+
+Deliverables:
+- root cause
+- changed files
+- what was fixed
+- test steps:
+  X sends message to Y
+  Y sees unread badge on Chat tab
+  Y opens chat and sees message inside thread
+  unread badge disappears after opening
+  Y replies
+  X sees correct unread badge and correct message inside thread

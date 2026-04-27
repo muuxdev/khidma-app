@@ -1,0 +1,74 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "rd4BazPxVnktwC4BZSK_4"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/onboarding-hero.png"
+type = "image"
+title = "Onboarding hero illustration"
+
+[[generated]]
+id = "v9W5mRVPskGvATZx90qXJ"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/avatar-1.png"
+type = "image"
+title = "Arab male freelancer headshot"
+
+[[generated]]
+id = "0O_Vn2Pw4-1JSR2iug7WA"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/avatar-2.png"
+type = "image"
+title = "Arab female freelancer headshot"
+
+[[generated]]
+id = "NJkNMYoSC_dxPAqALLEIC"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/avatar-3.png"
+type = "image"
+title = "Arab male creative headshot"
+
+[[generated]]
+id = "CM7Si25u9cBi7HrguZB5n"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/avatar-4.png"
+type = "image"
+title = "Arab female professional headshot"
+
+[[generated]]
+id = "49sXZHNRHu_sVnX7Bo9Hl"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/portfolio-1.png"
+type = "image"
+title = "E-commerce store mockup"
+
+[[generated]]
+id = "38Xzx5ziWsdj9WuZdWgOu"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/portfolio-2.png"
+type = "image"
+title = "Social media ad campaign"
+
+[[generated]]
+id = "0G85utm0QLgj15i1Oa886"
+uri = "file://artifacts/mockup-sandbox/public/images/freelance-mobile/portfolio-3.png"
+type = "image"
+title = "Product photography cosmetics"
+
+[[generated]]
+id = "5tNw4mfc2J9Q18ahiwm9M"
+uri = "file://artifacts/khidma/assets/images/icon.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "NUGF_aQ10Pm51AsUmOkN7"
+uri = "file://artifacts/khidma/assets/images/cat-shopify.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "s4ZP17t8V2j5rfXCHeZh7"
+uri = "file://artifacts/khidma/assets/images/cat-marketing.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "R2dNqt9cumFf1iXsc3r9N"
+uri = "file://artifacts/khidma/assets/images/cat-branding.png"
+type = "image"
+title = "generated_image"

@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "Khidma Mobile"
+version = "1.0.0"
+id = "artifacts/khidma"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 24501
+
+[services.development]
+run = "pnpm --filter @workspace/khidma run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/khidma", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/khidma", "run", "serve" ]
+
+[services.env]
+PORT = "24501"
+BASE_PATH = "/"

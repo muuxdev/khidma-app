@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --fm-primary: 254 100% 62%; /* #5B3EFF */
+    --fm-primary-blue: 223 100% 59%; /* #2F6BFF */
+    --fm-mint: 168 74% 55%; /* #39E2C2 */
+    --fm-orange: 25 100% 55%; /* #FF7A1A */
+    
+    --fm-bg-light: 0 0% 98%;
+    --fm-card-light: 0 0% 100%;
+    --fm-text-light: 220 10% 10%;
+    
+    --fm-bg-dark: 230 15% 8%;
+    --fm-card-dark: 230 15% 12%;
+    --fm-text-dark: 0 0% 98%;
+    
+    /* Gradients */
+    --fm-gradient-brand: linear-gradient(135deg, #5B3EFF 0%, #2F6BFF 100%);
+    --fm-gradient-dark: linear-gradient(180deg, #10121A 0%, #0A0B0F 100%);
+  }
+
+  [dir="rtl"] {
+    font-family: 'Cairo', sans-serif;
+  }
+  
+  [dir="ltr"] {
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+  }
+}
+
+.fm-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.fm-scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.fm-glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .fm-glass {
+  background: rgba(20, 22, 30, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

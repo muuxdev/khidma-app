@@ -1,0 +1,238 @@
+We need to fully fix the core marketplace flow for Khidma:
+
+1. freelancer publishes a service
+2. client views published services
+3. client orders a service
+4. conversation is created correctly
+5. chat works correctly for both sender and receiver
+6. messages display under the correct account
+
+==================================================
+CRITICAL BUG
+==================================================
+
+I tested with two accounts:
+- X = freelancer / service owner
+- Y = client / buyer
+
+When X sends a message to Y, then I log into Y, the app shows the message as if Y sent it.
+
+Also:
+- orders sometimes fail due to RLS
+- notifications fail
+- audit logs fail
+- chat fails
+- data appears mixed between users
+
+This indicates broken:
+- session isolation
+- sender_id logic
+- client_id / freelancer_id mapping
+- cached data separation
+- RLS mismatch with frontend behavior
+
+==================================================
+PART 1 — AUDIT CURRENT FLOW
+==================================================
+
+Audit the exact current implementation for:
+
+- AuthContext
+- DataContext
+- services API
+- orders API
+- chat API
+- mappers
+- AsyncStorage usage
+- React Query/cache usage
+- mock fallback logic
+- chat UI message rendering
+- service publish flow
+- order creation flow
+- conversation creation flow
+
+Identify:
+- where current user is stored
+- how session changes are handled
+- whether logout clears all state
+- whether data is cached globally or per user
+- where sender_id is assigned
+- how client_id and freelancer_id are assigned
+- how UI determines message ownership
+- whether mock data mixes with Supabase
+
+==================================================
+PART 2 — HARD RULES
+==================================================
+
+AUTH:
+- current user id must always come from Supabase session
+- logout must clear:
+  user, profile, role, services, orders, chats, wallet
+- login must refetch all user data
+- no stale data from previous account
+
+CACHE:
+- AsyncStorage keys must be namespaced by user id
+OR fully cleared on logout
+- never mix data between users
+
+SERVICES:
+- freelancer_id = current user id
+- only freelancer can create/publish
+- client sees only published + not deleted
+
+ORDERS:
+- client_id = current user
+- freelancer_id = service owner
+- cannot order own service
+
+CONVERSATIONS:
+- must store correct client_id and freelancer_id
+- must not swap roles
+- one conversation per order
+
+MESSAGES:
+- sender_id = current user id
+- UI determines "mine" by:
+  message.sender_id === currentUser.id
+- do not use role/name/index for ownership
+- deduplicate messages
+- realtime must not duplicate
+
+==================================================
+PART 3 — FIX RLS + SQL
+==================================================
+
+Fix all RLS policies so they match app behavior.
+
+services:
+- allow read for published only
+- allow insert/update for owner freelancer
+
+orders:
+- allow insert if client_id = auth.uid()
+- allow read for both participants
+
+conversations:
+- allow insert if auth.uid() is participant
+
+messages:
+- allow insert if sender_id = auth.uid()
+- sender must be participant
+
+notifications:
+- allow insert only if user_id is correct
+
+audit_logs:
+- allow insert only if user_id = auth.uid()
+
+IMPORTANT:
+NO POLICY SHOULD USE:
+with check (true)
+
+==================================================
+PART 4 — CLEAN TEMP SQL (VERY IMPORTANT)
+==================================================
+
+We previously added temporary debug policies manually.
+
+You MUST:
+
+1. Find all policies using:
+   with check (true)
+
+2. Remove them
+
+3. Replace with secure policies:
+   - audit_logs → user_id = auth.uid()
+   - notifications → user_id = auth.uid()
+   - messages → sender_id = auth.uid()
+   - conversations → participant only
+   - orders → client only insert
+
+4. Ensure final RLS is production safe
+
+==================================================
+PART 5 — FIX CODE
+==================================================
+
+Fix:
+
+AuthContext:
+- proper session listener
+- full reset on logout
+- no stale user
+
+DataContext:
+- clear data on logout
+- refetch on login
+- separate public vs user data
+
+servicesApi:
+- correct freelancer_id
+
+ordersApi:
+- correct client_id & freelancer_id
+- create conversation correctly
+
+chatApi:
+- correct sender_id
+- correct conversation_id
+- no duplication
+
+chat UI:
+- ownership strictly by sender_id === current user
+
+cache:
+- isolate per user or clear on logout
+
+==================================================
+PART 6 — TEST FLOW
+==================================================
+
+Test this:
+
+Freelancer X:
+- create & publish service
+
+Client Y:
+- see service
+- place order
+
+Conversation:
+- correct participants
+
+Chat:
+- Y sends → sender_id = Y
+- X sees it as received
+- X replies → sender_id = X
+- Y sees it as received
+
+NO CROSS ACCOUNT LEAK:
+- no mixed data
+- no wrong sender
+- no wrong ownership
+
+==================================================
+PART 7 — DELIVERABLES
+==================================================
+
+Provide:
+
+- root cause
+- files changed
+- SQL changes
+- RLS changes
+- what was broken
+- what was fixed
+- test results
+
+IMPORTANT:
+- Do NOT redesign UI
+- Do NOT add new features
+- Focus ONLY on:
+  publish service
+  order service
+  chat correctness
+  account isolation

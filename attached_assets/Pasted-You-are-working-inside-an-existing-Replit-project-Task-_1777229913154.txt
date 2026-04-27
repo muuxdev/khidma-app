@@ -1,0 +1,469 @@
+You are working inside an existing Replit project.
+
+Task:
+Build the backend integration for the existing MVP using Supabase without rebuilding or redesigning the UI.
+
+IMPORTANT:
+Before coding, audit the current project and identify:
+- framework: React / Next.js / Expo / Vite / other
+- routing system
+- state management
+- current data layer: mock data / localStorage / API
+- folder structure
+- existing auth flow
+- existing screens and roles
+
+Do NOT rebuild the frontend.
+Do NOT change the design system.
+Do NOT remove existing screens.
+Preserve:
+- Arabic / English bilingual support
+- RTL / LTR
+- dark mode
+- animations
+- current layouts
+- current components
+
+Main goal:
+Replace mock/local data with Supabase backend through a clean scalable architecture.
+
+Architecture rules:
+- Create a centralized Supabase client file.
+- Create a centralized API/services layer.
+- Do NOT call Supabase directly inside UI components.
+- Separate:
+  - UI
+  - API calls
+  - business logic
+  - validation
+  - types
+
+Suggested structure:
+- lib/supabase.ts
+- lib/api/
+- lib/validation/
+- lib/types/
+- hooks/
+- store/ or context/
+
+Environment variables:
+Detect project framework and use the correct env names:
+
+For Vite:
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY
+
+For Next.js:
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+For Expo:
+- EXPO_PUBLIC_SUPABASE_URL
+- EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+Rules:
+- Never hardcode Supabase keys.
+- If env variables are missing:
+  - do not crash the app
+  - show a visible UI warning
+  - keep mock fallback data
+  - disable write actions safely
+
+Supabase modules to implement:
+- Auth
+- PostgreSQL Database
+- Storage
+- Realtime
+
+Authentication:
+Replace mock auth with Supabase Auth:
+- signup
+- login
+- logout
+- session persistence
+- role support: client / freelancer
+
+Rules:
+- validate role on signup
+- prevent duplicate emails
+- create profile automatically after signup
+- store user session globally
+
+State management:
+Use the existing state system if present.
+If missing, add Context API or Zustand.
+Handle:
+- current user
+- session
+- role
+- loading
+- auth errors
+- cached user profile
+
+Data fetching:
+Use existing fetching system if present.
+If missing, add React Query or SWR.
+Add:
+- caching
+- refetch logic
+- optimistic updates where safe
+- loading states
+- empty states
+- error states
+
+Database schema:
+Create SQL migration files for:
+
+1. profiles
+Fields:
+- id uuid primary key references auth.users(id)
+- full_name text
+- email text unique
+- role text check role in ('client','freelancer')
+- avatar_url text
+- bio text
+- skills jsonb default '[]'
+- rating numeric default 0
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+2. services
+Fields:
+- id uuid primary key
+- freelancer_id uuid references profiles(id)
+- title_ar text
+- title_en text
+- description_ar text
+- description_en text
+- category text
+- slug text unique
+- status text check status in ('draft','published')
+- basic_price numeric
+- standard_price numeric
+- premium_price numeric
+- basic_description text
+- standard_description text
+- premium_description text
+- images text[]
+- deleted_at timestamptz
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+Rules:
+- freelancer manages own services
+- clients only read published services
+- draft services visible only to owner
+- deleted_at means soft delete
+
+3. orders
+Fields:
+- id uuid primary key
+- client_id uuid references profiles(id)
+- freelancer_id uuid references profiles(id)
+- service_id uuid references services(id)
+- package_type text check package_type in ('basic','standard','premium','custom')
+- total_price numeric check total_price > 0
+- platform_fee numeric
+- freelancer_earnings numeric
+- status text check status in ('pending','active','delivered','completed','cancelled')
+- requirements text
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+Rules:
+- client cannot order own service
+- client and freelancer can read shared orders
+- freelancer can update order status
+- commission is calculated in database only
+
+Commission logic:
+Create SQL function and BEFORE INSERT trigger:
+- platform_fee = ROUND(total_price * 0.15, 2)
+- freelancer_earnings = total_price - platform_fee
+
+Do not calculate commission in frontend.
+
+4. wallet_transactions
+Fields:
+- id uuid primary key
+- freelancer_id uuid references profiles(id)
+- order_id uuid references orders(id)
+- type text check type in ('earning','refund','adjustment')
+- amount numeric
+- status text check status in ('pending','available','cancelled')
+- description text
+- created_at timestamptz default now()
+
+Rule:
+- wallet balance is computed dynamically from wallet_transactions
+- do not add payout system
+
+5. quote_requests
+Fields:
+- id uuid primary key
+- client_id uuid references profiles(id)
+- freelancer_id uuid references profiles(id)
+- service_id uuid references services(id)
+- title text
+- description text
+- budget numeric
+- proposed_price numeric
+- status text check status in ('pending','responded','accepted','rejected','converted')
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+Rules:
+- client submits quote
+- freelancer responds
+- accepted quote can convert to order
+- order conversion uses same commission logic
+
+6. conversations
+Fields:
+- id uuid primary key
+- order_id uuid references orders(id)
+- quote_request_id uuid references quote_requests(id)
+- client_id uuid references profiles(id)
+- freelancer_id uuid references profiles(id)
+- created_at timestamptz default now()
+
+Rules:
+- conversation created when order or quote exists
+- only participants can read
+
+7. messages
+Fields:
+- id uuid primary key
+- conversation_id uuid references conversations(id)
+- sender_id uuid references profiles(id)
+- content text
+- type text check type in ('text','file')
+- attachment_url text
+- is_read boolean default false
+- created_at timestamptz default now()
+
+Rules:
+- realtime messaging
+- only participants can send/read
+- sender must be conversation participant
+
+8. notifications
+Fields:
+- id uuid primary key
+- user_id uuid references profiles(id)
+- type text
+- title text
+- body text
+- is_read boolean default false
+- created_at timestamptz default now()
+
+Triggers for:
+- new order
+- new message
+- quote update
+- order update
+
+9. audit_logs
+Fields:
+- id uuid primary key
+- user_id uuid references profiles(id)
+- action text
+- entity text
+- entity_id uuid
+- created_at timestamptz default now()
+
+Add audit logs for important create/update/delete actions.
+
+Database requirements:
+- Enable RLS on all tables.
+- Add foreign keys.
+- Add indexes.
+- Add check constraints.
+- Add updated_at trigger.
+- Add safe helper functions where needed.
+
+Indexes:
+- services(slug)
+- services(freelancer_id)
+- services(status)
+- orders(client_id)
+- orders(freelancer_id)
+- orders(service_id)
+- quote_requests(client_id)
+- quote_requests(freelancer_id)
+- conversations(client_id, freelancer_id)
+- messages(conversation_id, created_at)
+- notifications(user_id, is_read)
+
+Storage:
+Create buckets:
+- avatars public
+- service-images public
+- attachments private
+
+Storage rules:
+- validate file type
+- validate file size
+- users upload only own files
+- use secure paths:
+  userId/entityId/timestamp.ext
+- private attachments must use signed URLs
+
+API layer:
+Create service modules:
+
+- authApi
+  - signUp
+  - signIn
+  - signOut
+  - getSession
+  - getCurrentProfile
+
+- profileApi
+  - getProfile
+  - updateProfile
+  - uploadAvatar
+
+- servicesApi
+  - listPublishedServices
+  - getServiceBySlug
+  - createService
+  - updateService
+  - publishService
+  - softDeleteService
+  - searchServices
+  - filterServices
+
+- ordersApi
+  - createOrder
+  - getMyOrders
+  - updateOrderStatus
+
+- quotesApi
+  - createQuoteRequest
+  - respondToQuote
+  - convertQuoteToOrder
+
+- chatApi
+  - getConversations
+  - getMessagesPaginated
+  - sendMessage
+  - markMessagesAsRead
+  - subscribeToMessages
+
+- notificationsApi
+  - getNotifications
+  - markAsRead
+  - subscribeToNotifications
+
+- walletApi
+  - getWalletTransactions
+  - getComputedBalance
+
+Validation:
+Add client-side and API-layer validation:
+- required fields
+- role must be client or freelancer
+- price > 0
+- string length limits
+- allowed file types
+- upload size limits
+- message length limits
+
+Security:
+- Never trust UI role only.
+- Always validate user identity in API/backend logic.
+- RLS must enforce access control.
+- Sanitize user strings.
+- Prevent injection.
+- Prevent spam requests where possible.
+
+Rate limiting / abuse prevention:
+Add lightweight protection for:
+- login attempts
+- message sending
+- quote requests
+- order creation
+
+If full server-side rate limiting is not possible in the current stack, add a safe client-side throttle and document the limitation clearly.
+
+Role-based UI:
+Do not redesign UI.
+Only connect existing screens to real data and hide/show existing actions based on:
+- client
+- freelancer
+- unauthenticated user
+
+Fallback mode:
+If Supabase is not configured:
+- show clear warning banner
+- continue using current mock data
+- disable signup/login/create/update actions safely
+- do not crash
+
+Realtime:
+Use Supabase realtime for:
+- messages
+- notifications
+- order updates where needed
+
+Pagination:
+Implement pagination for:
+- services
+- orders
+- messages
+- notifications
+
+Do not fetch large tables without limit/range.
+
+Error handling:
+Create standardized error handling:
+- catch all Supabase errors
+- return friendly messages
+- log technical error to console
+- avoid exposing sensitive errors to users
+
+Error codes examples:
+- AUTH_INVALID_CREDENTIALS
+- AUTH_EMAIL_ALREADY_EXISTS
+- SERVICE_NOT_FOUND
+- ORDER_NOT_ALLOWED
+- UNAUTHORIZED
+- SUPABASE_NOT_CONFIGURED
+
+Testing flow:
+After implementation, verify:
+- signup as client
+- signup as freelancer
+- freelancer creates service
+- freelancer publishes service
+- client sees published service
+- client cannot see draft service
+- client places order
+- client cannot order own service
+- commission is calculated in DB
+- wallet transaction is created
+- conversation is created
+- message is sent in realtime
+- notification is created
+- missing env shows warning and fallback mode works
+
+Deliverables:
+At the end, provide:
+- summary of detected framework and structure
+- changed files list
+- SQL schema/migrations
+- RLS policies
+- storage setup instructions
+- environment variable instructions
+- setup steps for Supabase
+- testing checklist
+- any limitations or assumptions
+
+Constraints:
+- Do NOT rebuild UI.
+- Do NOT replace existing design.
+- Do NOT remove bilingual/RTL/dark mode/animations.
+- Do NOT add payout system.
+- Do NOT hardcode Supabase keys.
+- Keep code clean, scalable, and maintainable.

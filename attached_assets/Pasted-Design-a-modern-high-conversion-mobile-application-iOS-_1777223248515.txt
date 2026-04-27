@@ -1,0 +1,102 @@
+Design a modern, high-conversion mobile application (iOS & Android) for a freelance marketplace specialized in e-commerce services.
+
+🧠 Core Concept:
+
+The app connects two types of users:
+
+Service Providers (Freelancers) who sell predefined services with fixed pricing.
+Clients (Business Owners / Store Owners) who browse, purchase, or request services.
+
+The platform takes a commission from each transaction.
+
+🎯 Main Features:
+👤 Authentication:
+Sign up / Login (Email, Google, Apple)
+User selects role:
+Freelancer (Service Provider)
+Client (Buyer)
+🧑‍💻 Freelancer Side:
+Create profile (bio, skills, portfolio, ratings)
+Add services:
+Service title
+Description
+Price packages (Basic / Standard / Premium)
+Delivery time
+Add-ons
+Dashboard:
+Earnings
+Active orders
+Completed orders
+Chat with clients
+Notifications
+Wallet (after commission deduction)
+🛒 Client Side:
+Browse services by categories:
+Shopify / Salla store setup
+Ads management (TikTok, Meta)
+SEO optimization
+Product photography
+Branding
+Advanced filters (price, rating, delivery time)
+Service details page
+Order & checkout
+Request custom service
+Chat with freelancers
+Order tracking
+💳 Payment System:
+Secure checkout
+Commission system (platform takes %)
+Wallet system for freelancers
+Payment methods (Card, Apple Pay, Google Pay)
+🌍 Languages:
+Fully bilingual:
+Arabic (RTL layout)
+English (LTR layout)
+Smooth language switching
+Proper font pairing:
+Arabic: Cairo / Tajawal
+English: Inter / Poppins
+🎨 UI/UX Design Style:
+Modern, clean, minimal, high-trust
+Inspired by Fiverr + Upwork but more localized for e-commerce niche
+🎨 Color Palette:
+Primary: Deep Purple or Royal Blue (#5B3EFF or #2F6BFF)
+Secondary: Soft gradient (Purple → Blue)
+Accent: Neon Green or Orange for CTAs
+Background: Light (White / Soft Gray)
+Dark mode included
+✨ Animations & Microinteractions:
+Smooth page transitions
+Button hover & tap animations
+Loading skeletons
+Success animation after purchase
+Floating CTA buttons
+Subtle motion in onboarding screens
+📱 Key Screens:
+Splash Screen
+Onboarding (3–4 slides)
+Login / Signup
+Role Selection
+Home (Marketplace)
+Categories
+Service Details
+Chat
+Orders
+Dashboard (Freelancer)
+Wallet
+Profile
+Settings
+🚀 Extra Smart Features:
+AI recommendation for services
+“Top Rated” & “Trending” sections
+Reviews & ratings system
+Saved services (wishlist)
+Push notifications
+🎯 Goal:
+
+Design the app to maximize:
+
+Trust
+Conversion rate
+Ease of use
+Fast service purchase
