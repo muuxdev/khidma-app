@@ -27,6 +27,9 @@ export type DbProfile = {
   years_of_experience: number | null;
   rating: number | null;
   review_count: number | null;
+  followers_count: number | null;
+  completed_orders_count: number | null;
+  placed_orders_count: number | null;
   last_seen: string | null;
   created_at: string;
   updated_at: string;
@@ -153,7 +156,10 @@ export function profileToUser(p: DbProfile): User {
     bio: p.bio ?? undefined,
     rating: typeof p.rating === "number" ? p.rating : 0,
     reviewCount: typeof p.review_count === "number" ? p.review_count : 0,
-    completedJobs: 0, // derived elsewhere if needed
+    completedJobs:
+      typeof p.completed_orders_count === "number"
+        ? p.completed_orders_count
+        : 0,
     walletBalance: 0, // derived from wallet_transactions
     joinedAt: new Date(p.created_at).getTime(),
     tags: asStringArray(p.tags),
@@ -163,6 +169,10 @@ export function profileToUser(p: DbProfile): User {
       typeof p.years_of_experience === "number"
         ? p.years_of_experience
         : undefined,
+    followersCount:
+      typeof p.followers_count === "number" ? p.followers_count : 0,
+    placedOrdersCount:
+      typeof p.placed_orders_count === "number" ? p.placed_orders_count : 0,
   };
 }
 

@@ -77,3 +77,15 @@ id = "Gqd2lSmAorUgcOxt04lrA"
 uri = "file://exports/0004_escrow.sql.txt"
 type = "text"
 title = "0004_escrow.sql"
+
+[[outputs]]
+id = "-QKDoW9tSR9lRehUn20fb"
+uri = "file://exports/0009_follows.sql.txt"
+type = "text"
+title = "0009_follows.sql"
+
+[[outputs]]
+id = "-kqchj8ioWRGoKicqoj5T"
+uri = "file://exports/0010_client_orders_count.sql.txt"
+type = "text"
+title = "0010_client_orders_count.sql"

@@ -112,7 +112,7 @@ export default function HomeScreen() {
             onPress={() => router.push("/(tabs)/profile")}
             hitSlop={6}
           >
-            <Avatar name={user?.name || "U"} size={44} />
+            <Avatar name={user?.name || "U"} size={44} uri={user?.avatar} />
           </Pressable>
         </View>
 

@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -46,6 +46,22 @@ export default function ChatThreadScreen() {
     [id, messagesByThread],
   );
   const inverted = useMemo(() => [...messages].reverse(), [messages]);
+
+  // Show the partner's avatar only on the LAST bubble of each consecutive
+  // received-message run (WhatsApp / iMessage convention) — anything denser
+  // looks noisy. Pre-compute the id set once per message list change.
+  const avatarMessageIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (let i = 0; i < messages.length; i++) {
+      const m = messages[i];
+      if (m.senderId === meId || m.isSystem) continue;
+      const next = messages[i + 1];
+      if (!next || next.senderId !== m.senderId || next.isSystem) {
+        ids.add(m.id);
+      }
+    }
+    return ids;
+  }, [messages, meId]);
 
   // The "Seen" caption goes only on the most recent own message that the
   // partner has already read — matches WhatsApp / iMessage behaviour.
@@ -104,16 +120,27 @@ export default function ChatThreadScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScreenHeader title="" showBack rightIconName="more-horizontal" />
       {thread ? (
-        <View
-          style={[
+        <Pressable
+          onPress={() =>
+            thread.participantId
+              ? router.push(`/freelancer/${thread.participantId}`)
+              : null
+          }
+          style={({ pressed }) => [
             styles.headerInfo,
             {
               borderBottomColor: colors.divider,
               flexDirection: isRtl ? "row-reverse" : "row",
+              opacity: pressed ? 0.92 : 1,
             },
           ]}
         >
-          <Avatar name={thread.participantName} size={40} online={isOnline} />
+          <Avatar
+            name={thread.participantName}
+            uri={thread.participantAvatar}
+            size={40}
+            online={isOnline}
+          />
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -132,7 +159,7 @@ export default function ChatThreadScreen() {
               {isOnline ? t("online") : ""}
             </Text>
           </View>
-        </View>
+        </Pressable>
       ) : null}
 
       <KeyboardAvoidingView
@@ -156,6 +183,9 @@ export default function ChatThreadScreen() {
               message={item}
               mine={item.senderId === meId}
               showSeen={item.id === lastReadOwnId}
+              partnerName={thread?.participantName}
+              partnerAvatarUri={thread?.participantAvatar}
+              showPartnerAvatar={avatarMessageIds.has(item.id)}
             />
           )}
         />

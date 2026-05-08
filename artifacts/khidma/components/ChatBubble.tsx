@@ -9,15 +9,32 @@ import { useColors } from "@/hooks/useColors";
 import { formatTime } from "@/lib/format";
 import type { Message } from "@/lib/types";
 
+import { Avatar } from "./ui/Avatar";
+
 type Props = {
   message: Message;
   mine: boolean;
   /** Render a small "Seen" caption below this message — only set on the most
    *  recent own message that the partner has already read. */
   showSeen?: boolean;
+  /** Partner's display name — used for the avatar fallback initials when
+   *  no avatar URI is available. Ignored on own messages. */
+  partnerName?: string;
+  partnerAvatarUri?: string;
+  /** Whether to render the partner avatar next to this received bubble. The
+   *  caller should set this true only on the last message of each consecutive
+   *  received-message run, so the column doesn't fill with duplicate avatars. */
+  showPartnerAvatar?: boolean;
 };
 
-export function ChatBubble({ message, mine, showSeen }: Props) {
+export function ChatBubble({
+  message,
+  mine,
+  showSeen,
+  partnerName,
+  partnerAvatarUri,
+  showPartnerAvatar,
+}: Props) {
   const colors = useColors();
   const { locale, isRtl, t } = useApp();
 
@@ -83,22 +100,50 @@ export function ChatBubble({ message, mine, showSeen }: Props) {
     );
   }
 
+  // Reserve a constant gutter for the avatar column so consecutive bubbles
+  // line up cleanly even when only the last one in a run renders the avatar.
+  const AVATAR_SIZE = 26;
+  const AVATAR_GUTTER = AVATAR_SIZE + 8;
   return (
-    <View style={[styles.wrap, { alignSelf }]}>
-      <View
-        style={[
-          styles.bubble,
-          bubbleRadius,
-          { backgroundColor: colors.surface },
-        ]}
-      >
-        <Text style={[styles.text, { color: colors.foreground }]}>
-          {message.text}
+    <View
+      style={[
+        styles.partnerRow,
+        {
+          alignSelf,
+          flexDirection: isRtl ? "row-reverse" : "row",
+        },
+      ]}
+    >
+      {showPartnerAvatar ? (
+        <Avatar
+          name={partnerName ?? ""}
+          uri={partnerAvatarUri}
+          size={AVATAR_SIZE}
+        />
+      ) : (
+        <View style={{ width: AVATAR_SIZE }} />
+      )}
+      <View style={{ width: 8 }} />
+      {/* Inner column intentionally has zero marginBottom — the partnerRow
+          owns the vertical rhythm so we don't double-stack spacing. */}
+      <View style={styles.partnerInner}>
+        <View
+          style={[
+            styles.bubble,
+            bubbleRadius,
+            { backgroundColor: colors.surface },
+          ]}
+        >
+          <Text style={[styles.text, { color: colors.foreground }]}>
+            {message.text}
+          </Text>
+        </View>
+        <Text style={[styles.time, { color: colors.mutedForeground }]}>
+          {formatTime(message.createdAt, locale)}
         </Text>
       </View>
-      <Text style={[styles.time, { color: colors.mutedForeground }]}>
-        {formatTime(message.createdAt, locale)}
-      </Text>
+      {/* AVATAR_GUTTER reserved for layout symmetry. */}
+      {AVATAR_GUTTER ? null : null}
     </View>
   );
 }
@@ -107,6 +152,15 @@ const styles = StyleSheet.create({
   wrap: {
     maxWidth: "78%",
     marginBottom: 8,
+    gap: 4,
+  },
+  partnerRow: {
+    alignItems: "flex-end",
+    marginBottom: 8,
+    maxWidth: "86%",
+  },
+  partnerInner: {
+    flexShrink: 1,
     gap: 4,
   },
   bubble: {

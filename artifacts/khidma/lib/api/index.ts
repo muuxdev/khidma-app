@@ -13,6 +13,7 @@ export type { DbNotification } from "./notifications";
 export * as walletApi from "./wallet";
 export * as reviewsApi from "./reviews";
 export * as supportApi from "./support";
+export * as followsApi from "./follows";
 
 export {
   serviceToUi,

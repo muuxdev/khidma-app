@@ -20,6 +20,13 @@ export type User = {
   skills?: string[];
   /** Freelancer-only — years of professional experience. */
   yearsOfExperience?: number;
+  /** Public follower count (freelancers). Kept in sync by a Postgres trigger
+   *  on the `follows` table. */
+  followersCount?: number;
+  /** Lifetime number of orders this user has placed as a client. Maintained
+   *  by a Postgres trigger on `orders`. Surfaced on the public client
+   *  profile view. */
+  placedOrdersCount?: number;
 };
 
 export type SupportTicket = {

@@ -95,17 +95,29 @@ export function ServiceCard({ service, variant = "wide" }: Props) {
         >
           {title}
         </Text>
-        <View
-          style={[
+        <Pressable
+          onPress={(e) => {
+            e.stopPropagation?.();
+            router.push(`/freelancer/${service.freelancerId}`);
+          }}
+          hitSlop={6}
+          style={({ pressed }) => [
             styles.sellerRow,
-            { flexDirection: isRtl ? "row-reverse" : "row" },
+            {
+              flexDirection: isRtl ? "row-reverse" : "row",
+              opacity: pressed ? 0.7 : 1,
+            },
           ]}
         >
-          <Avatar name={service.freelancerName} size={20} />
+          <Avatar
+            name={service.freelancerName}
+            uri={service.freelancerAvatar}
+            size={20}
+          />
           <Text style={[styles.seller, { color: colors.mutedForeground }]}>
             {service.freelancerName}
           </Text>
-        </View>
+        </Pressable>
         <View
           style={[
             styles.bottomRow,

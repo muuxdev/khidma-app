@@ -62,6 +62,10 @@ function RootLayoutNav() {
           name="service-edit/[id]"
           options={{ presentation: "card" }}
         />
+        <Stack.Screen
+          name="freelancer/[id]"
+          options={{ presentation: "card" }}
+        />
       </Stack>
     </>
   );

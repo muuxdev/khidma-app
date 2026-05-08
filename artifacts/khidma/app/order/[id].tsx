@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -435,12 +436,24 @@ export default function OrderDetailScreen() {
           >
             {counterpartyLabel}
           </Text>
-          <View
-            style={[
+          <Pressable
+            onPress={() =>
+              counterpartyId
+                ? router.push(`/freelancer/${counterpartyId}`)
+                : null
+            }
+            style={({ pressed }) => [
               styles.sellerCard,
-              { backgroundColor: colors.card, borderColor: colors.border, flexDirection: isRtl ? "row-reverse" : "row" },
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+                flexDirection: isRtl ? "row-reverse" : "row",
+                opacity: pressed ? 0.92 : 1,
+              },
             ]}
           >
+            {/* Order doesn't carry an avatar URL — Avatar falls back to
+                initials, which is fine for this card. */}
             <Avatar name={counterpartyName} size={44} online />
             <Text
               style={[
@@ -472,7 +485,7 @@ export default function OrderDetailScreen() {
                 </Text>
               </View>
             )}
-          </View>
+          </Pressable>
           {!chatUnlocked ? (
             <Text
               style={[

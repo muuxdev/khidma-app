@@ -67,7 +67,7 @@ export default function ProfileScreen() {
             style={styles.profileCard}
           >
             <View style={[styles.profileTop, { flexDirection: isRtl ? "row-reverse" : "row" }]}>
-              <Avatar name={user?.name || "U"} size={64} online />
+              <Avatar name={user?.name || "U"} size={64} online uri={user?.avatar} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.userName, { textAlign: isRtl ? "right" : "left" }]}>
                   {user?.name}
@@ -102,7 +102,10 @@ export default function ProfileScreen() {
                   label={t("rating")}
                 />
                 <View style={styles.statDivider} />
-                <Stat value="98%" label={t("responseRate")} />
+                <Stat
+                  value={(user?.followersCount ?? 0).toString()}
+                  label={t("followers")}
+                />
               </View>
             ) : null}
           </LinearGradient>
@@ -126,6 +129,13 @@ export default function ProfileScreen() {
 
         {/* Settings list */}
         <View style={{ paddingHorizontal: 20, marginTop: 22, gap: 4 }}>
+          {user?.id ? (
+            <SettingRow
+              iconName="user"
+              label={t("viewMyProfile")}
+              onPress={() => router.push(`/freelancer/${user.id}`)}
+            />
+          ) : null}
           <SettingRow
             iconName="edit-2"
             label={t("editProfile")}

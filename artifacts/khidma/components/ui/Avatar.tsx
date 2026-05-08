@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 import { gradient } from "@/constants/colors";
 
@@ -8,9 +8,10 @@ type Props = {
   name: string;
   size?: number;
   online?: boolean;
+  uri?: string | null;
 };
 
-export function Avatar({ name, size = 44, online }: Props) {
+export function Avatar({ name, size = 44, online, uri }: Props) {
   const initials = name
     .split(" ")
     .filter(Boolean)
@@ -19,25 +20,46 @@ export function Avatar({ name, size = 44, online }: Props) {
     .join("")
     .toUpperCase();
 
+  // Track image load failures so a broken URL falls back to initials
+  // instead of showing a blank circle.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  const showImage = !!uri && !failed;
+
   return (
     <View style={{ width: size, height: size }}>
-      <LinearGradient
-        colors={gradient.brand}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[
-          styles.base,
-          {
+      {showImage ? (
+        <Image
+          source={{ uri: uri as string }}
+          onError={() => setFailed(true)}
+          style={{
             width: size,
             height: size,
             borderRadius: size / 2,
-          },
-        ]}
-      >
-        <Text style={[styles.text, { fontSize: size * 0.38 }]}>
-          {initials || "?"}
-        </Text>
-      </LinearGradient>
+          }}
+        />
+      ) : (
+        <LinearGradient
+          colors={gradient.brand}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            styles.base,
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+            },
+          ]}
+        >
+          <Text style={[styles.text, { fontSize: size * 0.38 }]}>
+            {initials || "?"}
+          </Text>
+        </LinearGradient>
+      )}
       {online ? (
         <View
           style={[

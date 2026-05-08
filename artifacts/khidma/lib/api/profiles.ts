@@ -59,13 +59,33 @@ export async function uploadAvatar(
   file: { uri: string; name: string; type?: string; size?: number },
 ): Promise<string> {
   const sb = requireSupabase();
-  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase().split("?")[0];
   const path = `${userId}/avatar-${Date.now()}.${ext}`;
+
+  // React Native quirk: passing a `Blob` from `fetch(localUri).blob()` to
+  // supabase-js results in a 0-byte upload because the blob's underlying
+  // bytes aren't accessible to the request body serializer. Reading the
+  // file as an ArrayBuffer and uploading that yields the real bytes on
+  // every platform (web, iOS, Android).
   const res = await fetch(file.uri);
-  const blob = await res.blob();
+  const arrayBuffer = await res.arrayBuffer();
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    throw new Error("Selected image is empty (0 bytes).");
+  }
+
+  const contentType =
+    file.type ??
+    (ext === "png"
+      ? "image/png"
+      : ext === "webp"
+        ? "image/webp"
+        : ext === "gif"
+          ? "image/gif"
+          : "image/jpeg");
+
   const { error } = await sb.storage
     .from("avatars")
-    .upload(path, blob, { contentType: file.type ?? blob.type, upsert: true });
+    .upload(path, arrayBuffer, { contentType, upsert: true });
   if (error) throw toAppError(error);
   const { data } = sb.storage.from("avatars").getPublicUrl(path);
   await updateProfile(userId, { avatar_url: data.publicUrl });

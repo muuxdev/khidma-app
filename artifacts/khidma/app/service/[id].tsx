@@ -114,17 +114,24 @@ export default function ServiceDetailScreen() {
 
         {/* Seller */}
         <View style={{ paddingHorizontal: 20, marginTop: 18 }}>
-          <View
-            style={[
+          <Pressable
+            onPress={() => router.push(`/freelancer/${service.freelancerId}`)}
+            style={({ pressed }) => [
               styles.sellerCard,
               {
                 backgroundColor: colors.card,
                 borderColor: colors.border,
                 flexDirection: isRtl ? "row-reverse" : "row",
+                opacity: pressed ? 0.92 : 1,
               },
             ]}
           >
-            <Avatar name={service.freelancerName} size={48} online />
+            <Avatar
+              name={service.freelancerName}
+              uri={service.freelancerAvatar}
+              size={48}
+              online
+            />
             <View style={{ flex: 1 }}>
               <Text
                 style={[
@@ -140,12 +147,15 @@ export default function ServiceDetailScreen() {
                   { color: colors.mutedForeground, textAlign: isRtl ? "right" : "left" },
                 ]}
               >
-                {t("aboutSeller")}
+                {t("viewProfile")}
               </Text>
             </View>
-            {/* Chat lives inside the order after the deposit is paid — not
-                here. Removed in escrow flow. */}
-          </View>
+            <Feather
+              name={isRtl ? "chevron-left" : "chevron-right"}
+              size={20}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
         </View>
 
         {/* Packages */}

@@ -1,0 +1,92 @@
+تمام، كتبتلك البرومبت:
+
+---
+
+## Feature — Freelancer public profile screen + avatar in service card & chat
+
+### Part 1 — Show avatar in service card and chat
+
+**Service card:**
+- Fetch freelancer `avatar_url` from `profiles` when loading services
+- Display avatar next to freelancer name on the service card
+- If no avatar, show initials as fallback
+
+**Chat screen:**
+- Show partner's avatar in the chat header
+- Show partner's avatar on each message bubble (received messages only)
+- If no avatar, show initials as fallback
+
+---
+
+### Part 2 — Freelancer public profile screen
+
+Create new screen `app/freelancer/[id].tsx`
+
+**Trigger:**
+- Tapping the freelancer name/avatar on a service card opens this screen
+- Tapping the freelancer name in the chat header opens this screen
+
+**Content to display:**
+- Profile photo + name + online indicator
+- Bio
+- Tags + Keywords
+- Skills + Years of experience (freelancer only)
+- Average rating (stars) + total reviews count
+- Completed projects count
+- List of their published services (same service card style)
+- Follow button
+
+**Follow button behavior:**
+- If not following → show "Follow" button
+- If already following → show "Following" button
+- On follow:
+  - Increment freelancer's followers count by 1
+  - Send a notification to the client whenever this freelancer publishes a new service
+
+---
+
+### Database additions
+
+```sql
+CREATE TABLE follows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  follower_id UUID REFERENCES profiles(id),
+  freelancer_id UUID REFERENCES profiles(id),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(follower_id, freelancer_id)
+);
+
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS followers_count INT DEFAULT 0;
+```
+
+**Trigger:** when a new service is published (`status = 'published'`), send a notification to all followers of that freelancer:
+```sql
+-- notification for each follower
+INSERT INTO notifications (user_id, type, title, body)
+SELECT follower_id, 'new_service', ...
+FROM follows WHERE freelancer_id = NEW.user_id;
+```
+
+**RLS:**
+- follows: insert/delete only by `follower_id = auth.uid()`
+- follows: read by anyone
+- notifications: existing RLS applies
+
+---
+
+### Rules
+- Do not redesign existing screens
+- Preserve RTL/LTR and dark mode
+- Use existing service card component for the services list
+- Screen must work for both client and freelancer viewing another freelancer
+
+---
+
+### Deliverables
+- Changed files
+- SQL migration `0009_follows.sql`
+- Test steps:
+  - Client taps freelancer name → profile screen opens
+  - Client taps Follow → followers count increases
+  - Freelancer publishes new service → client gets notification
+  - Avatar shows correctly in service card and chat
