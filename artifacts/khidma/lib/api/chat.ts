@@ -10,13 +10,21 @@ import {
   type DbMessage,
 } from "./mappers";
 
+const CONV_SELECT = "id, order_id, quote_request_id, client_id, freelancer_id, is_locked, created_at";
 const CONV_JOIN =
-  "client:profiles!conversations_client_id_fkey(id, full_name, avatar_url)," +
-  "freelancer:profiles!conversations_freelancer_id_fkey(id, full_name, avatar_url)";
+  "client:profiles!conversations_client_id_fkey(id, full_name, avatar_url, last_seen)," +
+  "freelancer:profiles!conversations_freelancer_id_fkey(id, full_name, avatar_url, last_seen)";
+
+type JoinedProfile = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  last_seen: string | null;
+};
 
 type DbConvJoined = DbConversation & {
-  client?: { id: string; full_name: string | null; avatar_url: string | null } | null;
-  freelancer?: { id: string; full_name: string | null; avatar_url: string | null } | null;
+  client?: JoinedProfile | null;
+  freelancer?: JoinedProfile | null;
 };
 
 export async function getOrCreateConversationByOrder(
@@ -74,11 +82,11 @@ export async function getConversations(meId: string): Promise<ChatThread[]> {
   const sb = requireSupabase();
   const { data, error } = await sb
     .from("conversations")
-    .select(`*, ${CONV_JOIN}`)
+    .select(`${CONV_SELECT}, ${CONV_JOIN}`)
     .or(`client_id.eq.${meId},freelancer_id.eq.${meId}`)
     .order("created_at", { ascending: false });
   if (error) throw toAppError(error);
-  const convos = (data ?? []) as DbConvJoined[];
+  const convos = (data ?? []) as unknown as DbConvJoined[];
   if (!convos.length) return [];
 
   // Fetch the most recent message + unread count per conversation in parallel.
@@ -92,6 +100,7 @@ export async function getConversations(meId: string): Promise<ChatThread[]> {
         id: partner?.id ?? "",
         name: partner?.full_name ?? "",
         avatar: partner?.avatar_url ?? null,
+        lastSeen: partner?.last_seen ?? null,
       };
       const [{ data: lastMsg }, { count }] = await Promise.all([
         sb
@@ -165,6 +174,30 @@ export async function sendMessage(
       sender_id: senderId,
       content: trimmed,
       type: "text",
+      is_system: false,
+    })
+    .select("*")
+    .single();
+  if (error) throw toAppError(error);
+  return messageToUi(data as DbMessage, conversationId);
+}
+
+/** Insert an automated system message (escrow transitions, etc.). The UI
+ *  renders these as a centered chip rather than as one of the parties. */
+export async function sendSystemMessage(
+  conversationId: string,
+  senderId: string,
+  text: string,
+): Promise<Message> {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from("messages")
+    .insert({
+      conversation_id: conversationId,
+      sender_id: senderId,
+      content: text,
+      type: "text",
+      is_system: true,
     })
     .select("*")
     .single();
@@ -204,6 +237,45 @@ export function subscribeToMessages(
       (payload) => {
         onMessage(messageToUi(payload.new as DbMessage, conversationId));
       },
+    )
+    .subscribe();
+  return () => {
+    sb.removeChannel(channel);
+  };
+}
+
+/**
+ * Notify when a new conversation is inserted where the given user is either
+ * the client or the freelancer. The caller typically responds by re-fetching
+ * the conversation list so the new thread (and its realtime subscription)
+ * are picked up.
+ */
+export function subscribeToMyConversations(
+  meId: string,
+  onChange: () => void,
+): () => void {
+  const sb = requireSupabase();
+  const channel = sb
+    .channel(`conversations:${meId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "conversations",
+        filter: `client_id=eq.${meId}`,
+      },
+      () => onChange(),
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "conversations",
+        filter: `freelancer_id=eq.${meId}`,
+      },
+      () => onChange(),
     )
     .subscribe();
   return () => {

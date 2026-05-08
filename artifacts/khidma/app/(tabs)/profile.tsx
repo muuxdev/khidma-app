@@ -16,6 +16,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { gradient } from "@/constants/colors";
 import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useData } from "@/contexts/DataContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function ProfileScreen() {
@@ -23,8 +24,20 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { t, locale, isRtl, isDark } = useApp();
   const { user, logout } = useAuth();
+  const { orders } = useData();
 
   const isFreelancer = user?.role === "freelancer";
+  // Derive completed-job count from live orders rather than the User row,
+  // which the profile mapper hard-codes to 0.
+  const completedJobs = React.useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.status === "completed" &&
+          (isFreelancer ? o.freelancerId === user?.id : o.clientId === user?.id),
+      ).length,
+    [orders, isFreelancer, user?.id],
+  );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 24) : insets.top;
   const bottomPad = Platform.OS === "web" ? insets.bottom + 100 : 100;
@@ -82,9 +95,12 @@ export default function ProfileScreen() {
 
             {isFreelancer ? (
               <View style={[styles.statsRow, { flexDirection: isRtl ? "row-reverse" : "row" }]}>
-                <Stat value={user?.completedJobs?.toString() || "0"} label={t("completed")} />
+                <Stat value={completedJobs.toString()} label={t("completed")} />
                 <View style={styles.statDivider} />
-                <Stat value={(user?.rating || 0).toFixed(1)} label={t("rating")} />
+                <Stat
+                  value={`${(user?.rating || 0).toFixed(1)} (${user?.reviewCount ?? 0})`}
+                  label={t("rating")}
+                />
                 <View style={styles.statDivider} />
                 <Stat value="98%" label={t("responseRate")} />
               </View>
@@ -111,6 +127,11 @@ export default function ProfileScreen() {
         {/* Settings list */}
         <View style={{ paddingHorizontal: 20, marginTop: 22, gap: 4 }}>
           <SettingRow
+            iconName="edit-2"
+            label={t("editProfile")}
+            onPress={() => router.push("/profile/edit")}
+          />
+          <SettingRow
             iconName="settings"
             label={t("settings")}
             onPress={() => router.push("/settings")}
@@ -118,12 +139,12 @@ export default function ProfileScreen() {
           <SettingRow
             iconName="bell"
             label={t("notifications")}
-            onPress={() => router.push("/settings")}
+            onPress={() => router.push("/notifications")}
           />
           <SettingRow
             iconName="help-circle"
             label={t("helpSupport")}
-            onPress={() => router.push("/settings")}
+            onPress={() => router.push("/help")}
           />
           <SettingRow
             iconName="info"

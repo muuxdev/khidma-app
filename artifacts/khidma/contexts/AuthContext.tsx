@@ -4,8 +4,10 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { AppState } from "react-native";
 
 import { authApi, profilesApi } from "@/lib/api";
 import {
@@ -33,6 +35,10 @@ type AuthContextValue = {
   logout: () => Promise<void>;
   guestMode: (role: Role) => Promise<User>;
   updateUser: (patch: Partial<User>) => Promise<void>;
+  /** Re-fetch the signed-in user's profile from the backend so trigger-derived
+   *  fields (rating, review_count) reflect their latest values. No-op for
+   *  guests / mock mode. */
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -41,6 +47,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const useBackend = isSupabaseConfigured();
+
+  // Mirror current user into a ref so callbacks (notably refreshUser) stay
+  // referentially stable across re-renders — otherwise consumers like
+  // DataContext that depend on `refreshUser` would re-run their effects
+  // every time we persist().
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
 
   const persist = useCallback(async (next: User | null) => {
     setUser(next);
@@ -179,6 +192,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [user, persist, useBackend],
   );
 
+  // ---------------------------------------------------------------------------
+  // Presence heartbeat: bump profiles.last_seen on app foreground + every 60s
+  // while the app is active. Anything older than 5 minutes is rendered as
+  // offline by the chat list / chat header.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!useBackend) return;
+    if (!user || user.email === "guest@khidma.app") return;
+    const userId = user.id;
+    let cancelled = false;
+    const ping = () => {
+      if (cancelled) return;
+      void profilesApi.heartbeat(userId);
+    };
+    ping();
+    const interval = setInterval(ping, 60_000);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") ping();
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, [useBackend, user]);
+
+  // Stable across renders (no `user` in deps); reads from the ref instead.
+  // Also short-circuits when the trigger-derived fields haven't changed so
+  // we don't churn state and re-trigger downstream hydration effects.
+  const refreshUser = useCallback(async () => {
+    if (!useBackend) return;
+    const current = userRef.current;
+    if (!current || current.email === "guest@khidma.app") return;
+    try {
+      const fresh = await profilesApi.getProfile(current.id);
+      if (!fresh) return;
+      const sameArr = (a?: string[], b?: string[]) =>
+        (a?.length ?? 0) === (b?.length ?? 0) &&
+        (a ?? []).every((v, i) => v === (b ?? [])[i]);
+      const same =
+        current.name === fresh.name &&
+        current.avatar === fresh.avatar &&
+        current.bio === fresh.bio &&
+        current.rating === fresh.rating &&
+        current.reviewCount === fresh.reviewCount &&
+        current.yearsOfExperience === fresh.yearsOfExperience &&
+        sameArr(current.tags, fresh.tags) &&
+        sameArr(current.keywords, fresh.keywords) &&
+        sameArr(current.skills, fresh.skills);
+      if (same) return;
+      await persist({
+        ...current,
+        name: fresh.name,
+        avatar: fresh.avatar,
+        bio: fresh.bio,
+        rating: fresh.rating,
+        reviewCount: fresh.reviewCount,
+        tags: fresh.tags,
+        keywords: fresh.keywords,
+        skills: fresh.skills,
+        yearsOfExperience: fresh.yearsOfExperience,
+      });
+    } catch {
+      // Best-effort.
+    }
+  }, [persist, useBackend]);
+
   const logout = useCallback(async () => {
     if (useBackend) {
       try {
@@ -194,8 +274,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [persist, useBackend]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, ready, login, signup, setRole, logout, guestMode, updateUser }),
-    [user, ready, login, signup, setRole, logout, guestMode, updateUser],
+    () => ({ user, ready, login, signup, setRole, logout, guestMode, updateUser, refreshUser }),
+    [user, ready, login, signup, setRole, logout, guestMode, updateUser, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

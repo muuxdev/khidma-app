@@ -9,7 +9,10 @@ export * as ordersApi from "./orders";
 export * as quotesApi from "./quotes";
 export * as chatApi from "./chat";
 export * as notificationsApi from "./notifications";
+export type { DbNotification } from "./notifications";
 export * as walletApi from "./wallet";
+export * as reviewsApi from "./reviews";
+export * as supportApi from "./support";
 
 export {
   serviceToUi,

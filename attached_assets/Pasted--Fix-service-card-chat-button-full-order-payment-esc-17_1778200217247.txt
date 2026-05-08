@@ -1,0 +1,80 @@
+تمام، دلوقتي واضح. هكتبلك البرومبت:
+
+---
+
+## Fix service card chat button + full order payment & escrow flow
+
+### Bug 1 — Hide chat button on own service card
+- If `service.freelancer_id === currentUser.id`, do **not** render the chat button on the service card
+- The freelancer should never see a chat button on their own services
+
+---
+
+### Feature 2 — Chat locked until deposit is paid
+
+**Current:** Chat is accessible from the service card before any payment.
+
+**Required:**
+- Remove the chat button from the service card entirely
+- Chat only becomes accessible **after the client pays the 15% deposit**
+- The chat button should only appear inside the order card (not the service card)
+- If deposit is not paid yet, show a "Pay Deposit to Start" button instead
+
+---
+
+### Feature 3 — Full escrow payment flow
+
+**Step 1 — Deposit (15%)**
+- Client pays 15% of service price inside the app
+- After successful payment, an automatic message is sent in the chat:
+  > "تم دفع المقدم بنجاح. يمكنك الآن التواصل مع مقدم الخدمة."
+- Chat is now unlocked for both parties
+
+**Step 2 — Information & materials exchange**
+- Client and freelancer communicate via chat
+- Inside the **order card**, freelancer sees a button: "استلمت المعلومات الكافية"
+- When freelancer taps it, an automatic message is sent to the client:
+  > "استلم مقدم الخدمة جميع المعلومات. يرجى تسديد باقي المبلغ لبدء العمل."
+- Client sees a "Pay Remaining Balance" button inside the order card
+
+**Step 3 — Full payment & work begins**
+- Client pays the remaining 85% inside the app
+- Funds are held in escrow (not released to freelancer yet)
+- Automatic chat message:
+  > "تم استلام المبلغ كاملاً وهو محجوز لحين تسليم العمل. يمكن لمقدم الخدمة البدء في العمل."
+
+**Step 4 — Work delivery & 7-day review window**
+- Freelancer marks order as complete inside the order card: "تم الانتهاء من العمل"
+- Automatic chat message sent to client:
+  > "أعلن مقدم الخدمة عن انتهاء العمل. لديك 7 أيام للمراجعة والتأكيد."
+- Client has 7 days to confirm delivery inside the order card
+- If client confirms → funds released to freelancer immediately
+- If 7 days pass with no response → funds automatically released to freelancer
+- Automatic message on auto-release:
+  > "انتهت مدة المراجعة. تم تحويل المبلغ لمقدم الخدمة تلقائياً."
+
+---
+
+### Order status flow
+```
+pending_deposit → deposit_paid → info_received → fully_paid → in_progress → delivered → completed
+```
+
+---
+
+### Rules
+- All payment logic happens inside the app (wallet)
+- All status transitions trigger automatic chat messages
+- Chat is only accessible from the order card, not the service card
+- Freelancer never sees chat button on their own services
+- Do not redesign any existing UI
+- Do not add new screens — use existing order card and chat screen
+- All automatic messages should be clearly styled as system messages (not from sender/receiver)
+
+---
+
+### Deliverables
+- Root cause of chat button bug
+- Changed files
+- SQL changes if order status column needs updating
+- Test steps covering full flow from deposit to auto-release

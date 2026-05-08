@@ -1,0 +1,89 @@
+## Prompt:
+
+---
+
+## Fix — Rating, Review Count & Completed Orders not showing on cards
+
+### Problem
+Data exists in the database but is not displayed in the UI across multiple screens.
+
+### Affected screens & missing fields
+
+**1. Home page — Freelancer card**
+- Missing: wallet balance, rating (stars), completed orders count
+
+**2. Profile page — Freelancer card**
+- Missing: rating (stars), completed orders count
+
+**3. Dashboard screen**
+- Missing: completed orders count
+
+**4. Service card (visible to clients)**
+- Missing: freelancer rating (stars)
+
+---
+
+### Root cause to investigate
+- Are `rating`, `review_count`, `completed_count` being fetched from Supabase and mapped correctly?
+- Are the mappers passing these fields to the UI components?
+- Are the UI components reading and rendering these fields?
+- Is the home page / service card using a cached/stale version of the freelancer profile that doesn't include rating?
+
+---
+
+### Requirements
+
+**For each affected screen:**
+- Fetch `rating`, `review_count` from `profiles` table
+- Fetch `completed_count` by counting orders where `status = 'completed'` and `freelancer_id = currentUser.id`
+- Pass values through mappers to UI components
+- Display correctly in the card
+
+**Wallet balance on Home page:**
+- Fetch from `wallets` table where `user_id = currentUser.id`
+- Display current balance
+
+**Service card (client view):**
+- Join or fetch freelancer `rating` + `review_count` from `profiles`
+- Display as stars or number next to freelancer name
+
+---
+
+### Rules
+- Do not redesign any cards
+- Do not add new screens
+- Only fix data fetching and display
+- Preserve RTL/LTR and dark mode
+
+---
+
+## Feature — Lock chat after order completion
+
+### Requirement
+- When the client confirms delivery (order status → `completed`) **or** auto-release triggers after 7 days
+- The chat conversation must be **locked for both parties**
+- Locked chat means:
+  - Text input is hidden or disabled
+  - A message is shown at the bottom: "تم إغلاق المحادثة بعد اكتمال الطلب" / "Chat closed after order completion"
+  - Both users can still **read** old messages but cannot send new ones
+
+### Implementation
+- Add `is_locked` boolean column to `conversations` table (default `false`)
+- Set `is_locked = true` when order status becomes `completed`
+- In `chat/[id].tsx`: check `conversation.is_locked` and hide/disable the input
+- In `escrow_auto_release()` SQL function: also set `is_locked = true` on the related conversation
+- System message sent automatically when locked:
+  > "تم إغلاق المحادثة بعد اكتمال الطلب والإفراج عن المبلغ."
+
+### Rules
+- Do not redesign the chat UI
+- Preserve RTL/LTR and dark mode
+- Old messages remain visible after locking
+
+---
+
+## Deliverables
+- Root cause per screen
+- Changed files
+- SQL migration
+- Test steps

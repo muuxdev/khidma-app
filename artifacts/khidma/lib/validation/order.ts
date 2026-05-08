@@ -7,9 +7,12 @@ export const OrderInputSchema = z.object({
 });
 
 export const OrderStatusSchema = z.enum([
-  "pending",
+  "pending_deposit",
+  "deposit_paid",
+  "info_received",
+  "fully_paid",
   "in_progress",
-  "review",
+  "delivered",
   "completed",
   "cancelled",
 ]);

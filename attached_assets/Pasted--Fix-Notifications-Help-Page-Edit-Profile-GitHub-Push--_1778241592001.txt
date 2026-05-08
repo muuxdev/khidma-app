@@ -1,0 +1,95 @@
+تمام، كتبتلك البرومبت:
+
+---
+
+## Fix Notifications + Help Page + Edit Profile + GitHub Push
+
+---
+
+### Bug 1 — Notifications page crash
+- Investigate why the Notifications screen fails to open
+- Fix the crash/error
+- Fetch real notifications from Supabase `notifications` table where `user_id = auth.uid()`
+- Display notifications in a list with:
+  - Icon based on type (order, chat, review, system)
+  - Title + body text
+  - Timestamp (relative: "منذ 5 دقائق")
+  - Unread dot indicator
+- Mark notifications as read when screen is opened
+- Show empty state when no notifications
+- Preserve RTL/LTR and dark mode
+
+---
+
+### Feature 2 — Help Page
+Replace the current help screen with:
+
+**Section 1 — FAQ**
+- At least 6 common questions and answers relevant to Khidma marketplace
+- Expandable/collapsible items (accordion style)
+- In both Arabic and English via i18n
+
+**Section 2 — Contact Support**
+- Simple form with:
+  - Subject (text input)
+  - Message (multiline text input)
+  - Send button
+- On submit: insert a row into a `support_tickets` table in Supabase
+- Show success message after sending
+- RLS: user_id = auth.uid() for insert
+
+---
+
+### Feature 3 — Edit My Profile
+Add "Edit My Profile" option accessible from the profile screen.
+
+**Fields:**
+- Profile photo (upload to Supabase Storage)
+- Bio (multiline text, max 300 chars)
+- Tags (comma-separated, e.g. "تصميم, برمجة, تسويق")
+- Keywords (for search, comma-separated)
+
+**Freelancer only — additional fields:**
+- Skills
+- Years of experience
+
+**Implementation:**
+- Add new screen `app/profile/edit.tsx` or use a modal
+- Save to `profiles` table
+- Profile photo uploaded to Supabase Storage bucket `avatars`
+- Display updated photo + bio on profile screen after save
+- RLS: user can only update their own profile
+
+**Database additions:**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bio TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tags TEXT[];
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS keywords TEXT[];
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS years_of_experience INT;
+```
+
+---
+
+### Feature 4 — Push all updates to GitHub
+After all fixes and features are done:
+- Commit all changes with message:
+  `feat: notifications fix, help page, edit profile, escrow flow, reviews, presence`
+- Push to: `https://github.com/muuxdev/khidma-app`
+- Branch: `main`
+
+---
+
+### Rules
+- Do not redesign existing screens unless specified
+- Preserve RTL/LTR and dark mode throughout
+- All new DB tables/columns need proper RLS
+- Do not add unnecessary new screens — use modals where possible
+
+---
+
+### Deliverables
+- Root cause of notifications crash
+- Changed files
+- SQL migration
+- GitHub push confirmation

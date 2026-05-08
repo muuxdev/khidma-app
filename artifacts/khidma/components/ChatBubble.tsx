@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,11 +12,41 @@ import type { Message } from "@/lib/types";
 type Props = {
   message: Message;
   mine: boolean;
+  /** Render a small "Seen" caption below this message — only set on the most
+   *  recent own message that the partner has already read. */
+  showSeen?: boolean;
 };
 
-export function ChatBubble({ message, mine }: Props) {
+export function ChatBubble({ message, mine, showSeen }: Props) {
   const colors = useColors();
-  const { locale, isRtl } = useApp();
+  const { locale, isRtl, t } = useApp();
+
+  // Automated escrow / system messages render as a centered, neutral chip
+  // so they're visually distinct from real conversation between the parties.
+  if (message.isSystem) {
+    return (
+      <View style={[styles.systemWrap]}>
+        <View
+          style={[
+            styles.systemBubble,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              flexDirection: isRtl ? "row-reverse" : "row",
+            },
+          ]}
+        >
+          <Feather name="info" size={12} color={colors.mutedForeground} />
+          <Text style={[styles.systemText, { color: colors.mutedForeground }]}>
+            {message.text}
+          </Text>
+        </View>
+        <Text style={[styles.systemTime, { color: colors.mutedForeground }]}>
+          {formatTime(message.createdAt, locale)}
+        </Text>
+      </View>
+    );
+  }
 
   const alignSelf = mine
     ? isRtl
@@ -43,6 +74,11 @@ export function ChatBubble({ message, mine }: Props) {
         <Text style={[styles.time, { color: colors.mutedForeground }]}>
           {formatTime(message.createdAt, locale)}
         </Text>
+        {showSeen ? (
+          <Text style={[styles.seen, { color: colors.mutedForeground }]}>
+            {t("seen")}
+          </Text>
+        ) : null}
       </View>
     );
   }
@@ -86,5 +122,37 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: "Inter_500Medium",
     marginHorizontal: 4,
+  },
+  seen: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+    alignSelf: "flex-end",
+    marginHorizontal: 4,
+  },
+  systemWrap: {
+    alignSelf: "center",
+    maxWidth: "88%",
+    marginBottom: 12,
+    gap: 4,
+    alignItems: "center",
+  },
+  systemBubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    gap: 8,
+  },
+  systemText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 16,
+    flexShrink: 1,
+    textAlign: "center",
+  },
+  systemTime: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
   },
 });

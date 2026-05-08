@@ -1,7 +1,0 @@
-
-> @workspace/khidma@0.0.0 dev /home/runner/workspace/artifacts/khidma
-> EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --localhost --port $PORT
-
-[90mStarting project at /home/runner/workspace/artifacts/khidma[39m
-› Port [1m24501[22m is being used by another process
-[?25l[2K[1G[36m?[39m [1mUse port 24502 instead?[22m [90m›[39m [90m(Y/n)[39m

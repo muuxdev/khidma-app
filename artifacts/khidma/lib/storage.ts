@@ -9,6 +9,7 @@ export const StorageKeys = {
   MESSAGES: "khidma:messages",
   WALLET: "khidma:wallet",
   SERVICES: "khidma:services",
+  REVIEWS: "khidma:reviews",
 } as const;
 
 // Keys that hold data tied to the currently signed-in user.
@@ -20,6 +21,7 @@ export const UserScopedKeys: readonly string[] = [
   StorageKeys.MESSAGES,
   StorageKeys.WALLET,
   StorageKeys.SERVICES,
+  StorageKeys.REVIEWS,
 ];
 
 export async function clearUserScopedData(): Promise<void> {

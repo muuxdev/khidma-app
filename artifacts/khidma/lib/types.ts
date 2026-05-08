@@ -8,9 +8,35 @@ export type User = {
   avatar?: string;
   bio?: string;
   rating?: number;
+  reviewCount?: number;
   completedJobs?: number;
   walletBalance?: number;
   joinedAt: number;
+  /** Discoverability tags (Arabic or English), e.g. "تصميم", "Shopify". */
+  tags?: string[];
+  /** Search keywords used by the discovery layer. */
+  keywords?: string[];
+  /** Skill list (mostly freelancer-only). */
+  skills?: string[];
+  /** Freelancer-only — years of professional experience. */
+  yearsOfExperience?: number;
+};
+
+export type SupportTicket = {
+  id: string;
+  subject: string;
+  message: string;
+  status: "open" | "in_progress" | "resolved" | "closed";
+  createdAt: number;
+};
+
+export type AppNotification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: number;
 };
 
 export type ServicePackage = {
@@ -66,9 +92,12 @@ export type ServiceCategory =
   | "content";
 
 export type OrderStatus =
-  | "pending"
+  | "pending_deposit"
+  | "deposit_paid"
+  | "info_received"
+  | "fully_paid"
   | "in_progress"
-  | "review"
+  | "delivered"
   | "completed"
   | "cancelled";
 
@@ -88,6 +117,13 @@ export type Order = {
   createdAt: number;
   dueAt: number;
   notes?: string;
+  depositAmount?: number;
+  finalAmount?: number;
+  depositPaidAt?: number;
+  infoReceivedAt?: number;
+  finalPaidAt?: number;
+  deliveredAt?: number;
+  autoReleaseAt?: number;
 };
 
 export type Message = {
@@ -97,6 +133,7 @@ export type Message = {
   text: string;
   createdAt: number;
   isRead?: boolean;
+  isSystem?: boolean;
 };
 
 export type ChatThread = {
@@ -108,6 +145,15 @@ export type ChatThread = {
   lastMessageAt: number;
   unreadCount: number;
   online?: boolean;
+  /** Partner's last_seen timestamp (ms since epoch); used to derive `online`. */
+  lastSeenAt?: number;
+  /** True once the linked order has completed (or escrow auto-released). When
+   *  set, the chat composer is hidden and a closed-conversation banner is
+   *  shown — old messages remain readable. */
+  isLocked?: boolean;
+  /** Order this conversation is scoped to (remote mode only). Used to lock
+   *  the right thread on completion when a partner has multiple orders. */
+  orderId?: string;
 };
 
 export type Transaction = {

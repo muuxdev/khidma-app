@@ -36,7 +36,11 @@ export default function DashboardScreen() {
   const activeCount = orders.filter(
     (o) => o.status !== "completed" && o.status !== "cancelled",
   ).length;
-  const completed = user?.completedJobs ?? 0;
+  // Live count from orders — `user.completedJobs` isn't mirrored from the
+  // backend so we'd otherwise always show 0 in remote mode.
+  const completed = orders.filter(
+    (o) => o.status === "completed" && o.freelancerId === user?.id,
+  ).length;
 
   const myServices = services.filter(
     (s) => s.ownerType === "user" && s.freelancerId === (user?.id ?? "me"),

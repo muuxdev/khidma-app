@@ -29,7 +29,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { t, locale, isRtl } = useApp();
   const { user } = useAuth();
-  const { services, orders } = useData();
+  const { services, orders, walletBalance } = useData();
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -61,6 +61,17 @@ export default function HomeScreen() {
       o.status !== "completed" &&
       o.status !== "cancelled",
   ) || orders.find((o) => o.status !== "completed" && o.status !== "cancelled");
+  // Derive completedJobs live from orders so the hero doesn't lag behind a
+  // stale `user.completedJobs` (which the profile mapper hard-codes to 0).
+  const completedJobs = useMemo(
+    () =>
+      orders.filter(
+        (o) =>
+          o.status === "completed" &&
+          (isFreelancer ? o.freelancerId === user?.id : o.clientId === user?.id),
+      ).length,
+    [orders, isFreelancer, user?.id],
+  );
 
   const topPad = Platform.OS === "web" ? Math.max(insets.top, 24) : insets.top;
   const bottomPad = Platform.OS === "web" ? insets.bottom + 100 : insets.bottom + 100;
@@ -137,8 +148,8 @@ export default function HomeScreen() {
         {/* Hero card — different for freelancer/client */}
         {isFreelancer ? (
           <FreelancerHero
-            balance={user?.walletBalance || 0}
-            jobs={user?.completedJobs || 0}
+            balance={walletBalance}
+            jobs={completedJobs}
             rating={user?.rating || 0}
           />
         ) : (

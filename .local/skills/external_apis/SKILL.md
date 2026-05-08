@@ -18,4 +18,4 @@ managed credentials.
 
 ## Available APIs
 
-- [Brave](references/brave.md) - Search real web image results through Brave passthrough billing.
+- [Brave](.local/skills/external_apis/references/brave.md) - Search real web image results through Brave passthrough billing.

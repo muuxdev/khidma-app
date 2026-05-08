@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StyleSheet,
@@ -10,38 +11,108 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ReviewModal } from "@/components/ReviewModal";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { Avatar } from "@/components/ui/Avatar";
 import { BrandButton } from "@/components/ui/BrandButton";
 import { CategoryThumb } from "@/components/ui/CategoryThumb";
 import { useApp } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useColors } from "@/hooks/useColors";
 import { formatDate, formatPrice } from "@/lib/format";
+import type { Order, OrderStatus } from "@/lib/types";
 
-const STATUS_KEY: Record<string, any> = {
-  pending: "pending",
+const STATUS_KEY: Record<OrderStatus, any> = {
+  pending_deposit: "pendingDeposit",
+  deposit_paid: "depositPaid",
+  info_received: "infoReceived",
+  fully_paid: "fullyPaid",
   in_progress: "inProgress",
-  review: "review",
+  delivered: "delivered",
   completed: "completed",
   cancelled: "cancelled",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: "#FF7A1A",
+const STATUS_COLOR: Record<OrderStatus, string> = {
+  pending_deposit: "#FF7A1A",
+  deposit_paid: "#F59E0B",
+  info_received: "#FACC15",
+  fully_paid: "#06B6D4",
   in_progress: "#2F6BFF",
-  review: "#9333EA",
+  delivered: "#9333EA",
   completed: "#39E2C2",
   cancelled: "#FF3B30",
 };
+
+// Steps shown in the progress strip — one per state in the escrow lifecycle
+// (cancelled is rendered as a banner instead of a step).
+const STEPS: { key: OrderStatus; label: string }[] = [
+  { key: "pending_deposit", label: "pendingDeposit" },
+  { key: "deposit_paid", label: "depositPaid" },
+  { key: "info_received", label: "infoReceived" },
+  { key: "fully_paid", label: "fullyPaid" },
+  { key: "in_progress", label: "inProgress" },
+  { key: "delivered", label: "delivered" },
+  { key: "completed", label: "completed" },
+];
+
+function statusRank(s: OrderStatus): number {
+  const order: OrderStatus[] = [
+    "pending_deposit",
+    "deposit_paid",
+    "info_received",
+    "fully_paid",
+    "in_progress",
+    "delivered",
+    "completed",
+  ];
+  const i = order.indexOf(s);
+  return i === -1 ? -1 : i;
+}
+
+function formatCountdown(ms: number, t: (k: any) => string): string {
+  if (ms <= 0) return "0" + t("hoursShort");
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  const days = Math.floor(hours / 24);
+  if (days >= 1) {
+    const remH = hours - days * 24;
+    return `${days}${t("daysShort2")} ${remH}${t("hoursShort")}`;
+  }
+  return `${hours}${t("hoursShort")}`;
+}
 
 export default function OrderDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { t, locale, isRtl } = useApp();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { orders, ensureThread, updateOrderStatus } = useData();
+  const {
+    orders,
+    ensureThread,
+    payDeposit,
+    markInfoReceived,
+    payFinal,
+    startWork,
+    markDelivered,
+    confirmDelivery,
+    reviewedOrderIds,
+    submitReview,
+  } = useData();
+  const { user } = useAuth();
   const order = orders.find((o) => o.id === id);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+
+  // Re-render once a minute so the auto-release countdown ticks. Cheap.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (order?.status !== "delivered") return;
+    const i = setInterval(() => setTick((n) => n + 1), 60_000);
+    return () => clearInterval(i);
+  }, [order?.status]);
+
+  const [busy, setBusy] = useState(false);
 
   if (!order) {
     return (
@@ -53,14 +124,192 @@ export default function OrderDetailScreen() {
   }
 
   const statusColor = STATUS_COLOR[order.status];
+  const isClient = user?.id === order.clientId;
+  const isFreelancer = user?.id === order.freelancerId;
+  const chatUnlocked =
+    order.status !== "pending_deposit" && order.status !== "cancelled";
 
-  const steps = [
-    { key: "pending", label: t("pending") },
-    { key: "in_progress", label: t("inProgress") },
-    { key: "review", label: t("review") },
-    { key: "completed", label: t("completed") },
-  ];
-  const activeIdx = steps.findIndex((s) => s.key === order.status);
+  // The freelancer view shows the client; the client view shows the
+  // freelancer. We only render the relevant counterparty.
+  const counterpartyName = isClient ? order.freelancerName : order.clientName;
+  const counterpartyId = isClient ? order.freelancerId : order.clientId;
+  const counterpartyLabel = isClient ? t("seller") : t("client");
+
+  const orderRank = statusRank(order.status);
+
+  const openChat = async () => {
+    // Prefer an order-scoped thread so multiple orders between the same pair
+    // each carry their own escrow audit trail. ensureThread() is partner-
+    // keyed in mock mode (a known limitation we accept for the demo) but
+    // backed by the order_id conversation in remote mode via the orders API.
+    const thread = await ensureThread(counterpartyId, counterpartyName);
+    router.push(`/chat/${thread.id}`);
+  };
+
+  // Confirmation dialog shared by all "pay" buttons. We don't actually move
+  // money — the wallet is simulated for the MVP — but we want the UX to
+  // feel like a payment step.
+  const confirmPay = (amount: number, onYes: () => Promise<void>) => {
+    const desc = t("payConfirmDesc").replace(
+      "{amount}",
+      formatPrice(amount, locale),
+    );
+    if (Platform.OS === "web") {
+      // eslint-disable-next-line no-alert
+      if (typeof window !== "undefined" && window.confirm(`${t("payConfirmTitle")}\n\n${desc}`)) {
+        void onYes();
+      }
+      return;
+    }
+    Alert.alert(t("payConfirmTitle"), desc, [
+      { text: t("cancel"), style: "cancel" },
+      { text: t("pay"), onPress: () => void onYes() },
+    ]);
+  };
+
+  const runAction = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err: any) {
+      const msg = err?.message ?? t("errorGeneric");
+      if (Platform.OS === "web") {
+        // eslint-disable-next-line no-alert
+        if (typeof window !== "undefined") window.alert(msg);
+      } else {
+        Alert.alert(t("errorGeneric"), msg);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Action button derivation per (role, status). Returns null if no action is
+  // available to the current viewer.
+  // ---------------------------------------------------------------------------
+  const renderActions = (): React.ReactNode => {
+    if (order.status === "cancelled") return null;
+    if (order.status === "completed") {
+      const alreadyReviewed = reviewedOrderIds.has(order.id);
+      return (
+        <BrandButton
+          title={alreadyReviewed ? t("reviewed") : t("leaveReview")}
+          variant="outline"
+          disabled={alreadyReviewed}
+          onPress={() => setReviewOpen(true)}
+          iconLeft={
+            <Feather
+              name={alreadyReviewed ? "check" : "star"}
+              size={18}
+              color={colors.foreground}
+            />
+          }
+        />
+      );
+    }
+
+    if (isClient) {
+      if (order.status === "pending_deposit") {
+        const dep = order.depositAmount ?? Math.round(order.price * 0.15);
+        return (
+          <BrandButton
+            title={`${t("payDeposit")} · ${t("sar")} ${formatPrice(dep, locale)}`}
+            loading={busy}
+            onPress={() =>
+              confirmPay(dep, () => runAction(() => payDeposit(order.id)))
+            }
+            iconLeft={<Feather name="lock" size={18} color="#fff" />}
+          />
+        );
+      }
+      if (order.status === "info_received") {
+        const fin = order.finalAmount ?? Math.round(order.price * 0.85);
+        return (
+          <BrandButton
+            title={`${t("payRemaining")} · ${t("sar")} ${formatPrice(fin, locale)}`}
+            loading={busy}
+            onPress={() =>
+              confirmPay(fin, () => runAction(() => payFinal(order.id)))
+            }
+            iconLeft={<Feather name="credit-card" size={18} color="#fff" />}
+          />
+        );
+      }
+      if (order.status === "delivered") {
+        return (
+          <BrandButton
+            title={t("confirmDelivery")}
+            loading={busy}
+            onPress={() => runAction(() => confirmDelivery(order.id))}
+            iconLeft={<Feather name="check-circle" size={18} color="#fff" />}
+          />
+        );
+      }
+      return null;
+    }
+
+    if (isFreelancer) {
+      if (order.status === "deposit_paid") {
+        return (
+          <BrandButton
+            title={t("confirmInfoReceived")}
+            loading={busy}
+            onPress={() => runAction(() => markInfoReceived(order.id))}
+            iconLeft={<Feather name="check" size={18} color="#fff" />}
+          />
+        );
+      }
+      if (order.status === "fully_paid") {
+        return (
+          <BrandButton
+            title={t("startWork")}
+            loading={busy}
+            onPress={() => runAction(() => startWork(order.id))}
+            iconLeft={<Feather name="play" size={18} color="#fff" />}
+          />
+        );
+      }
+      if (order.status === "in_progress") {
+        return (
+          <BrandButton
+            title={t("markDelivered")}
+            loading={busy}
+            onPress={() => runAction(() => markDelivered(order.id))}
+            iconLeft={<Feather name="upload" size={18} color="#fff" />}
+          />
+        );
+      }
+      return null;
+    }
+    return null;
+  };
+
+  // Auto-release countdown banner shown while in `delivered`.
+  const releaseBanner = (() => {
+    if (order.status !== "delivered" || !order.autoReleaseAt) return null;
+    const remaining = order.autoReleaseAt - Date.now();
+    return (
+      <View
+        style={[
+          styles.banner,
+          {
+            backgroundColor: STATUS_COLOR.delivered + "1A",
+            borderColor: STATUS_COLOR.delivered + "55",
+            flexDirection: isRtl ? "row-reverse" : "row",
+          },
+        ]}
+      >
+        <Feather name="clock" size={16} color={STATUS_COLOR.delivered} />
+        <Text style={[styles.bannerText, { color: STATUS_COLOR.delivered }]}>
+          {remaining > 0
+            ? `${t("autoReleaseIn")} ${formatCountdown(remaining, t)}`
+            : t("autoReleasedNow")}
+        </Text>
+      </View>
+    );
+  })();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -108,6 +357,10 @@ export default function OrderDetailScreen() {
           </View>
         </View>
 
+        {releaseBanner ? (
+          <View style={{ paddingHorizontal: 20, marginTop: 14 }}>{releaseBanner}</View>
+        ) : null}
+
         {/* Progress steps */}
         <View style={{ paddingHorizontal: 20, marginTop: 18 }}>
           <Text
@@ -124,8 +377,8 @@ export default function OrderDetailScreen() {
               { flexDirection: isRtl ? "row-reverse" : "row" },
             ]}
           >
-            {steps.map((s, i) => {
-              const reached = i <= activeIdx;
+            {STEPS.map((s, i) => {
+              const reached = statusRank(s.key) <= orderRank;
               return (
                 <React.Fragment key={s.key}>
                   <View style={styles.stepWrap}>
@@ -138,7 +391,7 @@ export default function OrderDetailScreen() {
                       ]}
                     >
                       {reached ? (
-                        <Feather name="check" size={12} color="#fff" />
+                        <Feather name="check" size={11} color="#fff" />
                       ) : null}
                     </View>
                     <Text
@@ -150,16 +403,18 @@ export default function OrderDetailScreen() {
                       ]}
                       numberOfLines={1}
                     >
-                      {s.label}
+                      {t(s.label)}
                     </Text>
                   </View>
-                  {i < steps.length - 1 ? (
+                  {i < STEPS.length - 1 ? (
                     <View
                       style={[
                         styles.stepBar,
                         {
                           backgroundColor:
-                            i < activeIdx ? statusColor : colors.divider,
+                            statusRank(STEPS[i + 1].key) <= orderRank
+                              ? statusColor
+                              : colors.divider,
                         },
                       ]}
                     />
@@ -178,7 +433,7 @@ export default function OrderDetailScreen() {
               { color: colors.foreground, textAlign: isRtl ? "right" : "left" },
             ]}
           >
-            {t("seller")}
+            {counterpartyLabel}
           </Text>
           <View
             style={[
@@ -186,30 +441,48 @@ export default function OrderDetailScreen() {
               { backgroundColor: colors.card, borderColor: colors.border, flexDirection: isRtl ? "row-reverse" : "row" },
             ]}
           >
-            <Avatar name={order.freelancerName} size={44} online />
+            <Avatar name={counterpartyName} size={44} online />
             <Text
               style={[
                 styles.sellerName,
                 { color: colors.foreground, flex: 1, textAlign: isRtl ? "right" : "left" },
               ]}
             >
-              {order.freelancerName}
+              {counterpartyName}
             </Text>
-            <BrandButton
-              title={t("contactSeller")}
-              variant="secondary"
-              size="sm"
-              fullWidth={false}
-              onPress={async () => {
-                const thread = await ensureThread(
-                  order.freelancerId,
-                  order.freelancerName,
-                );
-                router.push(`/chat/${thread.id}`);
-              }}
-              iconLeft={<Feather name="message-circle" size={14} color={colors.foreground} />}
-            />
+            {chatUnlocked ? (
+              <BrandButton
+                title={t("openChat")}
+                variant="secondary"
+                size="sm"
+                fullWidth={false}
+                onPress={openChat}
+                iconLeft={<Feather name="message-circle" size={14} color={colors.foreground} />}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.lockedPill,
+                  { backgroundColor: colors.surface, borderColor: colors.border },
+                ]}
+              >
+                <Feather name="lock" size={12} color={colors.mutedForeground} />
+                <Text style={[styles.lockedText, { color: colors.mutedForeground }]}>
+                  {t("chatLockedTitle")}
+                </Text>
+              </View>
+            )}
           </View>
+          {!chatUnlocked ? (
+            <Text
+              style={[
+                styles.lockedHint,
+                { color: colors.mutedForeground, textAlign: isRtl ? "right" : "left" },
+              ]}
+            >
+              {t("chatLockedDesc")}
+            </Text>
+          ) : null}
         </View>
 
         {/* Details */}
@@ -224,6 +497,14 @@ export default function OrderDetailScreen() {
             <DetailRow label={t("package")} value={t(order.packageTier)} />
             <DetailRow label={t("deliveryDate")} value={formatDate(order.dueAt, locale)} />
             <DetailRow
+              label={t("deposit15")}
+              value={`${t("sar")} ${formatPrice(order.depositAmount ?? Math.round(order.price * 0.15), locale)}`}
+            />
+            <DetailRow
+              label={t("final85")}
+              value={`${t("sar")} ${formatPrice(order.finalAmount ?? Math.round(order.price * 0.85), locale)}`}
+            />
+            <DetailRow
               label={t("total")}
               value={`${t("sar")} ${formatPrice(order.price, locale)}`}
               highlight
@@ -232,25 +513,42 @@ export default function OrderDetailScreen() {
         </View>
 
         {/* Action */}
-        {order.status === "review" ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 22 }}>
-            <BrandButton
-              title={t("markComplete")}
-              onPress={() => updateOrderStatus(order.id, "completed")}
-              iconLeft={<Feather name="check-circle" size={18} color="#fff" />}
-            />
-          </View>
-        ) : null}
-        {order.status === "completed" ? (
-          <View style={{ paddingHorizontal: 20, marginTop: 22 }}>
-            <BrandButton
-              title={t("leaveReview")}
-              variant="outline"
-              iconLeft={<Feather name="star" size={18} color={colors.foreground} />}
-            />
-          </View>
-        ) : null}
+        {(() => {
+          const action = renderActions();
+          if (!action) return null;
+          return (
+            <View style={{ paddingHorizontal: 20, marginTop: 22 }}>{action}</View>
+          );
+        })()}
       </ScrollView>
+      <ReviewModal
+        visible={reviewOpen}
+        revieweeName={counterpartyName}
+        submitting={reviewBusy}
+        onClose={() => (!reviewBusy ? setReviewOpen(false) : undefined)}
+        onSubmit={async (rating, comment) => {
+          if (reviewBusy) return;
+          setReviewBusy(true);
+          try {
+            await submitReview({
+              orderId: order.id,
+              revieweeId: counterpartyId,
+              rating,
+              comment,
+            });
+            setReviewOpen(false);
+          } catch (err: any) {
+            const msg = err?.message ?? t("errorGeneric");
+            if (Platform.OS === "web") {
+              if (typeof window !== "undefined") window.alert(msg);
+            } else {
+              Alert.alert(t("errorGeneric"), msg);
+            }
+          } finally {
+            setReviewBusy(false);
+          }
+        }}
+      />
     </View>
   );
 }
@@ -320,16 +618,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   stepsRow: { alignItems: "center" },
-  stepWrap: { alignItems: "center", gap: 6, width: 64 },
+  stepWrap: { alignItems: "center", gap: 6, width: 56 },
   stepDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepLabel: { fontSize: 10, fontFamily: "Inter_600SemiBold", textAlign: "center" },
-  stepBar: { flex: 1, height: 2, marginHorizontal: -10, marginBottom: 18 },
+  stepLabel: { fontSize: 9, fontFamily: "Inter_600SemiBold", textAlign: "center" },
+  stepBar: { flex: 1, height: 2, marginHorizontal: -8, marginBottom: 18 },
   sellerCard: {
     padding: 12,
     borderRadius: 16,
@@ -338,6 +636,22 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sellerName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  lockedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  lockedText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+  lockedHint: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    marginTop: 8,
+    lineHeight: 16,
+  },
   detailCard: {
     padding: 14,
     borderRadius: 18,
@@ -350,4 +664,17 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   detailValue: { fontSize: 14 },
+  banner: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 10,
+  },
+  bannerText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    flex: 1,
+  },
 });

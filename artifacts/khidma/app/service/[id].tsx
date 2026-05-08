@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+// Pressable kept for the package picker tabs below.
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ScreenHeader } from "@/components/ScreenHeader";
@@ -27,7 +28,7 @@ export default function ServiceDetailScreen() {
   const insets = useSafeAreaInsets();
   const { t, locale, isRtl } = useApp();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { services, createOrder, ensureThread } = useData();
+  const { services, createOrder } = useData();
   const { user } = useAuth();
   const [tier, setTier] = useState<"basic" | "standard" | "premium">("standard");
   const [placing, setPlacing] = useState(false);
@@ -47,12 +48,14 @@ export default function ServiceDetailScreen() {
   const total = pkg.price + fee;
   const title = locale === "ar" ? service.titleAr : service.title;
   const desc = locale === "ar" ? service.descriptionAr : service.description;
+  const isOwnService = !!user && service.freelancerId === user.id;
 
   const handleOrder = async () => {
-    if (!user) return;
+    if (!user || isOwnService) return;
     setPlacing(true);
+    // Chat is now gated on the deposit being paid; the order's conversation
+    // is created by payDeposit(), not eagerly here.
     const order = await createOrder(service, tier, user.name, user.id);
-    await ensureThread(service.freelancerId, service.freelancerName);
     setPlacing(false);
     if (Platform.OS === "web") {
       router.replace(`/order/${order.id}`);
@@ -62,11 +65,6 @@ export default function ServiceDetailScreen() {
         { text: t("viewOrder"), onPress: () => router.replace(`/order/${order.id}`) },
       ]);
     }
-  };
-
-  const handleContact = async () => {
-    const thread = await ensureThread(service.freelancerId, service.freelancerName);
-    router.push(`/chat/${thread.id}`);
   };
 
   const bottomBarHeight = 86;
@@ -145,19 +143,8 @@ export default function ServiceDetailScreen() {
                 {t("aboutSeller")}
               </Text>
             </View>
-            <Pressable
-              onPress={handleContact}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.contactBtn,
-                {
-                  backgroundColor: colors.primary + "1A",
-                  opacity: pressed ? 0.8 : 1,
-                },
-              ]}
-            >
-              <Feather name="message-circle" size={18} color={colors.primary} />
-            </Pressable>
+            {/* Chat lives inside the order after the deposit is paid — not
+                here. Removed in escrow flow. */}
           </View>
         </View>
 
@@ -327,9 +314,10 @@ export default function ServiceDetailScreen() {
         </View>
         <View style={{ flex: 1.4 }}>
           <BrandButton
-            title={t("orderNow")}
+            title={isOwnService ? t("ownServiceCannotOrder") : t("orderNow")}
             onPress={handleOrder}
             loading={placing}
+            disabled={isOwnService}
           />
         </View>
       </View>

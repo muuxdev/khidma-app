@@ -22,7 +22,12 @@ export type DbProfile = {
   avatar_url: string | null;
   bio: string | null;
   skills: unknown;
+  tags: string[] | null;
+  keywords: string[] | null;
+  years_of_experience: number | null;
   rating: number | null;
+  review_count: number | null;
+  last_seen: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -58,6 +63,16 @@ export type DbService = {
   updated_at: string;
 };
 
+export type DbOrderStatus =
+  | "pending_deposit"
+  | "deposit_paid"
+  | "info_received"
+  | "fully_paid"
+  | "in_progress"
+  | "delivered"
+  | "completed"
+  | "cancelled";
+
 export type DbOrder = {
   id: string;
   client_id: string;
@@ -71,9 +86,16 @@ export type DbOrder = {
   total_price: number;
   platform_fee: number | null;
   freelancer_earnings: number | null;
-  status: "pending" | "active" | "delivered" | "completed" | "cancelled";
+  status: DbOrderStatus;
   requirements: string | null;
   due_at: string | null;
+  deposit_amount: number | null;
+  final_amount: number | null;
+  deposit_paid_at: string | null;
+  info_received_at: string | null;
+  final_paid_at: string | null;
+  delivered_at: string | null;
+  auto_release_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -84,6 +106,7 @@ export type DbConversation = {
   quote_request_id: string | null;
   client_id: string;
   freelancer_id: string;
+  is_locked?: boolean | null;
   created_at: string;
 };
 
@@ -95,6 +118,7 @@ export type DbMessage = {
   type: "text" | "file";
   attachment_url: string | null;
   is_read: boolean;
+  is_system?: boolean;
   created_at: string;
 };
 
@@ -111,6 +135,14 @@ export type DbWalletTx = {
 
 /* ---------- profiles ---------- */
 
+function asStringArray(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const out = value.filter((v): v is string => typeof v === "string");
+    return out.length ? out : undefined;
+  }
+  return undefined;
+}
+
 export function profileToUser(p: DbProfile): User {
   return {
     id: p.id,
@@ -120,9 +152,17 @@ export function profileToUser(p: DbProfile): User {
     avatar: p.avatar_url ?? undefined,
     bio: p.bio ?? undefined,
     rating: typeof p.rating === "number" ? p.rating : 0,
+    reviewCount: typeof p.review_count === "number" ? p.review_count : 0,
     completedJobs: 0, // derived elsewhere if needed
     walletBalance: 0, // derived from wallet_transactions
     joinedAt: new Date(p.created_at).getTime(),
+    tags: asStringArray(p.tags),
+    keywords: asStringArray(p.keywords),
+    skills: asStringArray(p.skills),
+    yearsOfExperience:
+      typeof p.years_of_experience === "number"
+        ? p.years_of_experience
+        : undefined,
   };
 }
 
@@ -233,40 +273,41 @@ export function uiServiceToInsert(s: Service, freelancerId: string): Partial<DbS
 
 /* ---------- orders ---------- */
 
-export function dbOrderStatusToUi(s: DbOrder["status"]): OrderStatus {
-  switch (s) {
-    case "active":
-      return "in_progress";
-    case "delivered":
-      return "review";
-    default:
-      return s;
-  }
+// DB and UI use the same status names now that the escrow lifecycle is in
+// place. These helpers stay around for callers that still pass through them
+// so a future divergence is a one-line change.
+export function dbOrderStatusToUi(s: DbOrderStatus): OrderStatus {
+  return s;
+}
+export function uiOrderStatusToDb(s: OrderStatus): DbOrderStatus {
+  return s;
 }
 
-export function uiOrderStatusToDb(s: OrderStatus): DbOrder["status"] {
-  switch (s) {
+export function orderProgressFor(status: OrderStatus): number {
+  switch (status) {
+    case "pending_deposit":
+      return 5;
+    case "deposit_paid":
+      return 18;
+    case "info_received":
+      return 30;
+    case "fully_paid":
+      return 45;
     case "in_progress":
-      return "active";
-    case "review":
-      return "delivered";
-    default:
-      return s;
+      return 60;
+    case "delivered":
+      return 85;
+    case "completed":
+      return 100;
+    case "cancelled":
+      return 0;
   }
 }
 
 export function orderToUi(o: DbOrder): Order {
   const status = dbOrderStatusToUi(o.status);
-  const progress =
-    status === "completed"
-      ? 100
-      : status === "review"
-      ? 85
-      : status === "in_progress"
-      ? 60
-      : status === "cancelled"
-      ? 0
-      : 5;
+  const ts = (s: string | null | undefined) =>
+    s ? new Date(s).getTime() : undefined;
   return {
     id: o.id,
     serviceId: o.service_id,
@@ -282,10 +323,18 @@ export function orderToUi(o: DbOrder): Order {
     freelancerId: o.freelancer_id,
     freelancerName: o.freelancer_name ?? "",
     status,
-    progress,
+    progress: orderProgressFor(status),
     createdAt: new Date(o.created_at).getTime(),
     dueAt: o.due_at ? new Date(o.due_at).getTime() : Date.now(),
     notes: o.requirements ?? undefined,
+    depositAmount:
+      o.deposit_amount != null ? Number(o.deposit_amount) : undefined,
+    finalAmount: o.final_amount != null ? Number(o.final_amount) : undefined,
+    depositPaidAt: ts(o.deposit_paid_at),
+    infoReceivedAt: ts(o.info_received_at),
+    finalPaidAt: ts(o.final_paid_at),
+    deliveredAt: ts(o.delivered_at),
+    autoReleaseAt: ts(o.auto_release_at),
   };
 }
 
@@ -299,16 +348,33 @@ export function messageToUi(m: DbMessage, threadId: string): Message {
     text: m.content,
     createdAt: new Date(m.created_at).getTime(),
     isRead: m.is_read,
+    isSystem: m.is_system === true,
   };
+}
+
+/** A user is considered "online" if their last_seen heartbeat fired within the
+ *  last 5 minutes. Centralised so chat list, header, and avatar dot agree. */
+export const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+export function isOnlineFromLastSeen(lastSeenAt?: number | null): boolean {
+  if (!lastSeenAt) return false;
+  return Date.now() - lastSeenAt < ONLINE_WINDOW_MS;
 }
 
 export function conversationToThread(
   c: DbConversation,
   meId: string,
-  partner: { id: string; name: string; avatar?: string | null },
+  partner: {
+    id: string;
+    name: string;
+    avatar?: string | null;
+    lastSeen?: string | null;
+  },
   lastMessage: { content: string; created_at: string } | null,
   unreadCount: number,
 ): ChatThread {
+  const lastSeenAt = partner.lastSeen
+    ? new Date(partner.lastSeen).getTime()
+    : undefined;
   return {
     id: c.id,
     participantId: partner.id,
@@ -319,7 +385,10 @@ export function conversationToThread(
       ? new Date(lastMessage.created_at).getTime()
       : new Date(c.created_at).getTime(),
     unreadCount,
-    online: false,
+    online: isOnlineFromLastSeen(lastSeenAt),
+    lastSeenAt,
+    isLocked: c.is_locked === true,
+    orderId: c.order_id ?? undefined,
   };
 }
 

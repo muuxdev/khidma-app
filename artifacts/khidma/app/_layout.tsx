@@ -52,6 +52,12 @@ function RootLayoutNav() {
         <Stack.Screen name="dashboard" />
         <Stack.Screen name="wallet" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="notifications" />
+        <Stack.Screen name="help" />
+        <Stack.Screen
+          name="profile/edit"
+          options={{ presentation: "modal" }}
+        />
         <Stack.Screen
           name="service-edit/[id]"
           options={{ presentation: "card" }}

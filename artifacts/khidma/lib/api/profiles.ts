@@ -23,6 +23,9 @@ export async function updateProfile(
     avatar_url: string;
     bio: string;
     skills: string[];
+    tags: string[];
+    keywords: string[];
+    years_of_experience: number | null;
     role: Role;
   }>,
 ): Promise<User> {
@@ -35,6 +38,20 @@ export async function updateProfile(
     .single();
   if (error) throw toAppError(error);
   return profileToUser(data as DbProfile);
+}
+
+/** Bump the signed-in user's last_seen so others can render an online dot.
+ *  Best-effort: errors are swallowed (the heartbeat re-runs every minute). */
+export async function heartbeat(userId: string): Promise<void> {
+  const sb = requireSupabase();
+  try {
+    await sb
+      .from("profiles")
+      .update({ last_seen: new Date().toISOString() })
+      .eq("id", userId);
+  } catch {
+    // intentional: heartbeat is fire-and-forget
+  }
 }
 
 export async function uploadAvatar(

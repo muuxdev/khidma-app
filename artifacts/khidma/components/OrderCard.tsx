@@ -11,17 +11,23 @@ import type { Order } from "@/lib/types";
 import { CategoryThumb } from "./ui/CategoryThumb";
 
 const STATUS_KEY: Record<Order["status"], any> = {
-  pending: "pending",
+  pending_deposit: "pendingDeposit",
+  deposit_paid: "depositPaid",
+  info_received: "infoReceived",
+  fully_paid: "fullyPaid",
   in_progress: "inProgress",
-  review: "review",
+  delivered: "delivered",
   completed: "completed",
   cancelled: "cancelled",
 };
 
 const STATUS_COLOR: Record<Order["status"], string> = {
-  pending: "#FF7A1A",
+  pending_deposit: "#FF7A1A",
+  deposit_paid: "#F59E0B",
+  info_received: "#FACC15",
+  fully_paid: "#06B6D4",
   in_progress: "#2F6BFF",
-  review: "#9333EA",
+  delivered: "#9333EA",
   completed: "#39E2C2",
   cancelled: "#FF3B30",
 };

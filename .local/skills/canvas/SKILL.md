@@ -22,7 +22,7 @@ This does **not** apply to read-only requests (e.g. "what's on the canvas?"), mo
 
 The workspace canvas is an infinite board where you can create, position, and manipulate visual elements. It supports shapes, iframes (primarily used for design exploration), and artifacts (live-running apps such as websites or mobile apps).
 
-When users want to view frames at full size, they must click the preview button above the frame. Users can also toggle in and out of the canvas using the canvas button below the workspace-level preview window.
+When users want to view frames at full size, they must click the preview button above the frame. Users can also toggle in and out of the canvas using the canvas button below the workspace-level preview window. When telling the user where to view canvas content, say "open the Preview tab and toggle on the canvas" — there is no "Canvas tab".
 
 Artifact frames have special constraints - they cannot be deleted or freely resized (to maintain the snap back in ratio).
 
@@ -39,6 +39,8 @@ You have three callbacks available via `code_execution`:
 - **`focusCanvasShapes`** -- Pan and zoom the viewport to show specific shapes.
 
 All callbacks are async and must be awaited. Call them directly in `code_execution` -- they are pre-registered.
+
+**Parameter casing.** All canvas callbacks accept **camelCase** keys (e.g. `shapeIds`, `animateMs`, `focusArea`, `shapeId`, `componentName`). Passing snake_case keys causes a pydantic validation error like `shapeIds Field required`. The schemas below reflect the camelCase keys you must actually pass.
 
 ### Canvas + Mockup Sandbox
 
@@ -212,7 +214,7 @@ Read the current state of the canvas board. Returns shapes at three detail level
     }
   },
   "properties": {
-    "focus_area": {
+    "focusArea": {
       "anyOf": [{ "$ref": "#/$defs/FocusAreaInput" }, { "type": "null" }],
       "default": null,
       "description": "Optional region to zoom into. Shapes inside get full detail. If omitted, uses the current user viewport."
@@ -231,16 +233,16 @@ Read the current state of the canvas board. Returns shapes at three detail level
 
 ### `focusCanvasShapes`
 
-Pan and zoom the user's canvas viewport to center on specific shapes. Only call after the user asks to see your work.
+Pan and zoom the user's canvas viewport to center on specific shapes. Only call after the user asks to see your work — except for the empty-canvas mockup exception (see "Focusing the Viewport" below).
 
 ```json
 {
   "properties": {
-    "shape_ids": { "description": "List of shape IDs to focus on.", "items": { "type": "string" }, "type": "array" },
-    "animate_ms": { "anyOf": [{ "type": "number" }, { "type": "null" }], "default": null, "description": "Optional animation duration in milliseconds for the viewport transition. Use 500 for smooth transitions." },
+    "shapeIds": { "description": "List of shape IDs to focus on.", "items": { "type": "string" }, "type": "array" },
+    "animateMs": { "anyOf": [{ "type": "number" }, { "type": "null" }], "default": null, "description": "Optional animation duration in milliseconds for the viewport transition. Use 500 for smooth transitions." },
     "padding": { "anyOf": [{ "type": "number" }, { "type": "null" }], "default": null, "description": "Optional padding around the focused shapes in canvas units." }
   },
-  "required": ["shape_ids"]
+  "required": ["shapeIds"]
 }
 ```
 
@@ -426,7 +428,7 @@ await applyCanvasActions({ actions: [
 ] });
 ```
 
-Recipe: annotate an existing shape without moving it. Search both `focusedShapes` and `blurryShapes`; on a large board the anchor can be omitted from both (overflow lands in `peripheralClusters`, which has no per-shape data), so re-query with `focusArea` -- note the JS callback parameter is camelCase, not `focus_area`. Do NOT pass the anchor into `align`, that would move it:
+Recipe: annotate an existing shape without moving it. Search both `focusedShapes` and `blurryShapes`; on a large board the anchor can be omitted from both (overflow lands in `peripheralClusters`, which has no per-shape data), so re-query with `focusArea`. Do NOT pass the anchor into `align`, that would move it:
 
 ```javascript
 const find = (s) => s.shapeId === "pricing-card";
@@ -445,6 +447,8 @@ Do not follow `align`/`distribute` with a manual `move` on any of the same shape
 
 Pan and zoom the user's canvas viewport to center on specific shapes. **Only call after the user asks to see your work** -- don't auto-focus after creating or updating shapes. Finish your work and ask the user if they'd like to see it. Moving the viewport while the user is working is disorienting.
 
+**Exception:** the `mockup-sandbox` skill overrides this when `getCanvasState` returns zero shapes — focus on the just-placed placeholders so the user sees them appear. Once any shape exists, the default rule above applies.
+
 ## Iframe Rules & Gotchas
 
 - **Use `state` for lifecycle** -- Set `"building"` on create (URL optional), `"modifying"` before edits, `"live"` when ready (URL required).
@@ -458,7 +462,7 @@ Pan and zoom the user's canvas viewport to center on specific shapes. **Only cal
 
 1. Call `getCanvasState()` to see what's on the board.
 2. Use the `summary` and `focusedShapes` to understand positions and IDs.
-3. Call `apply_canvas_actions` with a batch of changes.
+3. Call `applyCanvasActions` with a batch of changes.
 4. **CRITICAL — Present the result.** After your final canvas action, you MUST call `presentArtifact({ artifactId, shapeIds: [...] })` with the IDs of all shapes you created or modified. This is how the user finds your work — without it, they cannot navigate to the shapes. Do NOT skip this step. Do NOT ask the user if they want to focus — just present.
 
 ## Error Codes
@@ -471,13 +475,13 @@ Pan and zoom the user's canvas viewport to center on specific shapes. **Only cal
 
 ## Best Practices
 
-1. **Read before writing** -- Always call `get_canvas_state` before layout-sensitive changes.
+1. **Read before writing** -- Always call `getCanvasState` before layout-sensitive changes.
 2. **Set shapeId on create** -- So you can reference, update, or delete the shape later.
-3. **Always call `presentArtifact` after canvas work.** After creating or modifying shapes, pass all affected shape IDs to `presentArtifact`. Never skip this. Never ask the user if they want to see the shapes. Do NOT call `focus_canvas_shapes` as a separate step.
-4. **Batch actions** -- Group related changes in one `apply_canvas_actions` call.
+3. **Always call `presentArtifact` after canvas work.** After creating or modifying shapes, pass all affected shape IDs to `presentArtifact`. Never skip this. Never ask the user if they want to see the shapes. Do NOT call `focusCanvasShapes` as a separate step (except for the narrow first-build mockup exception above).
+4. **Batch actions** -- Group related changes in one `applyCanvasActions` call.
 5. **Use https URLs** -- Iframe shapes reject http URLs.
 6. **Label iframes** -- Set `componentPath` and `componentName` so users can identify embedded content.
-7. **Use focus_area** -- For large boards, pass a region to `get_canvas_state` to get detail where you need it.
+7. **Use `focusArea`** -- For large boards, pass a region to `getCanvasState` to get detail where you need it.
 8. **Prefer `align`/`distribute` over manual coordinates when placing shapes together** -- For rows or columns of 3+ shapes you are laying out together, add `distribute` so you don't hand-compute gutters. `align` repositions every shape in `shapeIds` (no anchor), so only pass shapes you actually want moved. To place a new shape next to existing user content, read the anchor's position with `getCanvasState` (check both `focusedShapes` and `blurryShapes`) and create beside it -- share the aligned axis (e.g. `y: anchor.y`), offset the other by the anchor's position plus its size plus a gap (e.g. `x: anchor.x + anchor.w + gap`). Do not pass the anchor into `align`. See "Align and Distribute Shapes" above.
 
 ### Iframe Sizing

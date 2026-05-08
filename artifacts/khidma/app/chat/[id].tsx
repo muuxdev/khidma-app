@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Platform,
@@ -20,6 +20,7 @@ import { useApp } from "@/contexts/AppContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useData } from "@/contexts/DataContext";
 import { useColors } from "@/hooks/useColors";
+import { isOnlineFromLastSeen } from "@/lib/api/mappers";
 
 export default function ChatThreadScreen() {
   const colors = useColors();
@@ -46,13 +47,37 @@ export default function ChatThreadScreen() {
   );
   const inverted = useMemo(() => [...messages].reverse(), [messages]);
 
-  // On mount (and whenever the conversation id changes), pull the canonical
-  // message list from the backend and clear the unread badge for this thread.
+  // The "Seen" caption goes only on the most recent own message that the
+  // partner has already read — matches WhatsApp / iMessage behaviour.
+  const lastReadOwnId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.senderId === meId && m.isRead) return m.id;
+    }
+    return null;
+  }, [messages, meId]);
+
+  // Re-evaluate online dot every 30s so the indicator decays without needing
+  // a fresh fetch from the partner.
+  const [, setTick] = useState(0);
   useEffect(() => {
-    if (!id) return;
-    void loadMessages(id);
-    void markThreadRead(id);
-  }, [id, loadMessages, markThreadRead]);
+    const i = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(i);
+  }, []);
+  const isOnline = thread ? isOnlineFromLastSeen(thread.lastSeenAt) : false;
+
+  // Pull the canonical message list from the backend every time the screen
+  // becomes focused (mount, returning from background, navigating back, etc.)
+  // and clear the unread badge for this thread. Using useFocusEffect — not a
+  // plain useEffect — guarantees a refetch even when the screen instance is
+  // preserved across navigations.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      void loadMessages(id);
+      void markThreadRead(id);
+    }, [id, loadMessages, markThreadRead]),
+  );
 
   // Keep the thread "read" while the screen is mounted: any incoming realtime
   // message immediately gets marked as read so the bottom-tab badge does not
@@ -88,7 +113,7 @@ export default function ChatThreadScreen() {
             },
           ]}
         >
-          <Avatar name={thread.participantName} size={40} online={thread.online} />
+          <Avatar name={thread.participantName} size={40} online={isOnline} />
           <View style={{ flex: 1 }}>
             <Text
               style={[
@@ -101,10 +126,10 @@ export default function ChatThreadScreen() {
             <Text
               style={[
                 styles.headerStatus,
-                { color: thread.online ? colors.success : colors.mutedForeground, textAlign: isRtl ? "right" : "left" },
+                { color: isOnline ? colors.success : colors.mutedForeground, textAlign: isRtl ? "right" : "left" },
               ]}
             >
-              {thread.online ? t("online") : ""}
+              {isOnline ? t("online") : ""}
             </Text>
           </View>
         </View>
@@ -127,55 +152,85 @@ export default function ChatThreadScreen() {
             paddingBottom: 12,
           }}
           renderItem={({ item }) => (
-            <ChatBubble message={item} mine={item.senderId === meId} />
+            <ChatBubble
+              message={item}
+              mine={item.senderId === meId}
+              showSeen={item.id === lastReadOwnId}
+            />
           )}
         />
-        <View
-          style={[
-            styles.inputBar,
-            {
-              backgroundColor: colors.card,
-              borderTopColor: colors.divider,
-              paddingBottom: insets.bottom + 10,
-              flexDirection: isRtl ? "row-reverse" : "row",
-            },
-          ]}
-        >
-          <TextInput
-            ref={inputRef}
-            value={text}
-            onChangeText={setText}
-            placeholder={t("typeMessage")}
-            placeholderTextColor={colors.subtle}
+        {thread?.isLocked ? (
+          <View
             style={[
-              styles.input,
+              styles.lockedBar,
               {
-                backgroundColor: colors.surface,
-                color: colors.foreground,
-                textAlign: isRtl ? "right" : "left",
-              },
-            ]}
-            multiline
-            maxLength={500}
-          />
-          <Pressable
-            onPress={onSend}
-            disabled={!text.trim()}
-            style={({ pressed }) => [
-              styles.sendBtn,
-              {
-                backgroundColor: text.trim() ? colors.primary : colors.surface,
-                opacity: pressed ? 0.85 : 1,
+                backgroundColor: colors.card,
+                borderTopColor: colors.divider,
+                paddingBottom: insets.bottom + 14,
               },
             ]}
           >
-            <Feather
-              name="send"
-              size={18}
-              color={text.trim() ? "#fff" : colors.mutedForeground}
+            <Feather name="lock" size={14} color={colors.mutedForeground} />
+            <Text
+              style={[
+                styles.lockedText,
+                {
+                  color: colors.mutedForeground,
+                  textAlign: isRtl ? "right" : "left",
+                },
+              ]}
+            >
+              {t("chatClosed")}
+            </Text>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.inputBar,
+              {
+                backgroundColor: colors.card,
+                borderTopColor: colors.divider,
+                paddingBottom: insets.bottom + 10,
+                flexDirection: isRtl ? "row-reverse" : "row",
+              },
+            ]}
+          >
+            <TextInput
+              ref={inputRef}
+              value={text}
+              onChangeText={setText}
+              placeholder={t("typeMessage")}
+              placeholderTextColor={colors.subtle}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.surface,
+                  color: colors.foreground,
+                  textAlign: isRtl ? "right" : "left",
+                },
+              ]}
+              multiline
+              maxLength={500}
             />
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={onSend}
+              disabled={!text.trim()}
+              style={({ pressed }) => [
+                styles.sendBtn,
+                {
+                  backgroundColor: text.trim() ? colors.primary : colors.surface,
+                  opacity: pressed ? 0.85 : 1,
+                },
+              ]}
+            >
+              <Feather
+                name="send"
+                size={18}
+                color={text.trim() ? "#fff" : colors.mutedForeground}
+              />
+            </Pressable>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </View>
   );
@@ -214,5 +269,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+  },
+  lockedBar: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  lockedText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    flexShrink: 1,
   },
 });

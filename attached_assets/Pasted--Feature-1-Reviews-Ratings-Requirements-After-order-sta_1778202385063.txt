@@ -1,0 +1,70 @@
+تمام، كتبتلك البرومبت:
+
+---
+
+## Feature 1 — Reviews & Ratings
+
+### Requirements
+- After order status = `completed`, both client and freelancer can rate each other
+- Rating = stars only (1–5)
+- Each user can only submit one review per order
+- "Leave a Review" button appears on the order card only when:
+  - Order is `completed`
+  - Current user hasn't reviewed yet for this order
+
+### Where ratings appear
+- **Profile screen:** show average star rating + total number of reviews
+- **Service card** (visible to clients browsing): show average star rating of the freelancer
+
+### Database
+```sql
+CREATE TABLE reviews (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID REFERENCES orders(id),
+  reviewer_id UUID REFERENCES profiles(id),
+  reviewee_id UUID REFERENCES profiles(id),
+  rating INT CHECK (rating BETWEEN 1 AND 5),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(order_id, reviewer_id)
+);
+```
+- RLS: reviewer_id = auth.uid() for insert
+- RLS: anyone can read
+
+### UI
+- Tapping "Leave a Review" opens a simple star picker modal (1–5 stars)
+- After submit, button changes to "✓ Reviewed"
+- Do not add new screens — use a modal
+
+---
+
+## Feature 2 — Seen & Online in Chat
+
+### Online indicator
+- Show green dot on avatar when user was last active < 5 minutes ago
+- Store `last_seen` timestamp in `profiles` table
+- Update `last_seen` on app foreground + every 60 seconds while app is open
+
+### Seen indicator
+- Show "Seen" under the last message sent by current user when the other party has read it
+- Use existing `is_read` field on messages
+- When receiver opens the conversation, mark messages as read + update seen status for sender
+
+### UI
+- Online dot: small green circle on avatar in chat header and chat list
+- Seen: small "Seen" text under last sent message (like WhatsApp)
+- Do not redesign the chat UI
+
+---
+
+## Rules
+- Do not add new screens
+- Do not redesign existing UI
+- Preserve RTL/LTR and dark mode
+- All new DB changes must have proper RLS
+
+## Deliverables
+- Root cause / design decisions
+- Changed files
+- SQL migration
+- Test steps
